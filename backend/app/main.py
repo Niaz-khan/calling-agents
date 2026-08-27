@@ -6,9 +6,9 @@ from .database import get_db
 from app.config import settings
 from app.api.routes.agents import router as agents_router
 from app.api.routes.auth import router as auth_router
-from app.api.routes.chat import router as chat_router
 from app.api.routes.calls import router as calls_router
 from app.api.routes.chat import router as chat_router
+from app.api.routes.voice import router as voice_router
 
 app = FastAPI(
     title=settings.app_name,
@@ -19,6 +19,7 @@ app.include_router(agents_router)
 app.include_router(auth_router)
 app.include_router(chat_router)
 app.include_router(calls_router)
+app.include_router(voice_router)
 
 @app.get("/")
 def root():

@@ -12,8 +12,9 @@ from app.models.user import User
 from app.ai.agent import run_agent
 from app.auth.dependencies import get_current_user
 from app.models.call_message import CallMessage, MessageRole
+from app.services.calls import run_agent_turn
 from app.services.customers import create_customer
-from app.services.call_intelligence import finalize_call, get_customer_memory
+from app.services.call_intelligence import finalize_call
 from app.schemas.call import (
     CallCreate,
     CallDetailResponse,
@@ -255,124 +256,7 @@ async def send_message(call_id: int, data: MessageCreate, current_user: User = D
             detail="Agent not found",
         )
 
-    user_message = CallMessage(
-        call_id=call.id,
-        role=MessageRole.USER,
-        content=data.message,
-    )
-
-    db.add(user_message)
-    db.commit()
-
-    history_statement = (
-        select(CallMessage)
-        .where(CallMessage.call_id == call.id)
-        .order_by(CallMessage.created_at.asc(), CallMessage.id.asc())
-    )
-
-    history = db.scalars(history_statement).all()
-
-    conversation: list[dict] = []
-
-    memory = get_customer_memory(db, call)
-
-    if memory:
-        conversation.append(
-            {
-                "role": "system",
-                "content": (
-                    "These are notes about this customer from previous calls. "
-                    "Use them to provide personalized service.\n\n"
-                    f"{memory}"
-                ),
-            }
-        )
-
-    for message in history:
-        if message.role == MessageRole.USER:
-            conversation.append(
-                {
-                    "role": "user",
-                    "content": message.content,
-                }
-            )
-
-        elif message.role == MessageRole.ASSISTANT:
-            if message.tool_call_id is not None:
-                continue
-
-            try:
-                payload = json.loads(message.content)
-            except json.JSONDecodeError:
-                payload = None
-
-            tool_calls = payload.get("tool_calls") if payload else None
-
-            if tool_calls:
-                conversation.append(
-                    {
-                        "role": "assistant",
-                        "content": payload.get("content"),
-                        "tool_calls": tool_calls,
-                    }
-                )
-            else:
-                conversation.append(
-                    {
-                        "role": "assistant",
-                        "content": message.content,
-                    }
-                )
-
-        elif message.role == MessageRole.TOOL:
-            conversation.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": message.tool_call_id,
-                    "content": message.content,
-                }
-            )
-
-    result = await run_agent(
-        system_prompt=agent.system_prompt,
-        conversation=conversation,
-        db=db,
-        agent_id=agent.id,
-        call_id=call.id,
-    )
-
-    for msg in result.messages:
-        if msg["role"] == "assistant":
-            tool_info = {
-                "tool_calls": msg.get("tool_calls", []),
-            }
-            if msg.get("content"):
-                tool_info["content"] = msg["content"]
-
-            assistant_message = CallMessage(
-                call_id=call.id,
-                role=MessageRole.ASSISTANT,
-                content=json.dumps(tool_info),
-            )
-            db.add(assistant_message)
-
-        elif msg["role"] == "tool":
-            tool_message = CallMessage(
-                call_id=call.id,
-                role=MessageRole.TOOL,
-                content=msg["content"],
-                tool_call_id=msg.get("tool_call_id"),
-            )
-            db.add(tool_message)
-
-    assistant_message = CallMessage(
-        call_id=call.id,
-        role=MessageRole.ASSISTANT,
-        content=result.response,
-    )
-
-    db.add(assistant_message)
-    db.commit()
+    result = await run_agent_turn(db, call, agent, data.message)
 
     return MessageResponse(
         call_id=call.id,
