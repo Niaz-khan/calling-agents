@@ -27,6 +27,21 @@ class CallResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CallListResponse(BaseModel):
+    id: int
+    agent_id: int
+    agent_name: str
+    customer_id: int | None
+    caller_number: str
+    direction: str
+    status: str
+    outcome: str | None
+    summary: str | None
+    started_at: datetime
+    ended_at: datetime | None
+    duration_seconds: int | None
+
+
 class CallDetailResponse(BaseModel):
     id: int
     agent_id: int

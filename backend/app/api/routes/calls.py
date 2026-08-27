@@ -18,6 +18,7 @@ from app.services.call_intelligence import finalize_call
 from app.schemas.call import (
     CallCreate,
     CallDetailResponse,
+    CallListResponse,
     CallResponse,
     MessageCreate,
     MessageDetailResponse,
@@ -97,14 +98,14 @@ def create_call(data: CallCreate, agent_id: int, current_user: User = Depends(ge
     return call
 
 
-@router.get("", response_model=list[CallResponse])
+@router.get("", response_model=list[CallListResponse])
 def list_calls(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     agent_id: int | None = None,
 ):
     statement = (
-        select(Call)
+        select(Call, Agent.name)
         .join(Agent, Agent.id == Call.agent_id)
         .where(Agent.owner_id == current_user.id)
         .order_by(Call.started_at.desc())
@@ -113,8 +114,29 @@ def list_calls(
     if agent_id:
         statement = statement.where(Call.agent_id == agent_id)
 
-    calls = db.scalars(statement).all()
-    return calls
+    rows = db.execute(statement).all()
+
+    return [
+        CallListResponse(
+            id=call.id,
+            agent_id=call.agent_id,
+            agent_name=agent_name,
+            customer_id=call.customer_id,
+            caller_number=call.caller_number,
+            direction=call.direction.value,
+            status=call.status.value,
+            outcome=call.outcome.value if call.outcome else None,
+            summary=call.summary,
+            started_at=call.started_at,
+            ended_at=call.ended_at,
+            duration_seconds=(
+                int((call.ended_at - call.started_at).total_seconds())
+                if call.ended_at and call.started_at
+                else None
+            ),
+        )
+        for call, agent_name in rows
+    ]
 
 
 @router.get("/{call_id}", response_model=CallDetailResponse)
