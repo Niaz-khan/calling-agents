@@ -5,8 +5,12 @@ from app.ai.tools import (
     execute_tool,
     check_appointment_availability,
     book_appointment,
+    lookup_customer,
+    transfer_to_human,
 )
 from app.models.appointment import Appointment, AppointmentStatus
+from app.models.call import Call, CallDirection, CallStatus
+from app.models.customer import Customer
 
 
 class TestCheckAppointmentAvailability:
@@ -140,6 +144,69 @@ class TestBookAppointment:
         assert "error" in result
 
 
+class TestLookupCustomer:
+    def test_finds_existing_customer(self, db_session):
+        customer = Customer(
+            phone_number="1234567890",
+            name="John Doe",
+            email="john@example.com",
+        )
+        db_session.add(customer)
+        db_session.commit()
+
+        result = lookup_customer(
+            db=db_session,
+            phone_number="1234567890",
+        )
+
+        assert result["found"] is True
+        assert result["name"] == "John Doe"
+        assert result["email"] == "john@example.com"
+
+    def test_returns_not_found_for_unknown_number(self, db_session):
+        result = lookup_customer(
+            db=db_session,
+            phone_number="9999999999",
+        )
+
+        assert result["found"] is False
+        assert result["phone_number"] == "9999999999"
+
+
+class TestTransferToHuman:
+    def test_marks_call_as_transferred(self, db_session, test_agent):
+        call = Call(
+            agent_id=test_agent.id,
+            caller_number="1234567890",
+            direction=CallDirection.INBOUND,
+            status=CallStatus.IN_PROGRESS,
+        )
+        db_session.add(call)
+        db_session.commit()
+        db_session.refresh(call)
+
+        result = transfer_to_human(
+            db=db_session,
+            call_id=call.id,
+            reason="Customer requested human agent",
+        )
+
+        assert result["success"] is True
+        assert "transferring" in result["message"].lower()
+
+        db_session.refresh(call)
+        assert call.status == CallStatus.TRANSFERRED
+
+    def test_returns_success_without_call_id(self, db_session):
+        result = transfer_to_human(
+            db=db_session,
+            call_id=None,
+            reason="Test transfer",
+        )
+
+        assert result["success"] is True
+
+
 class TestExecuteTool:
     def test_execute_check_availability_tool(self, db_session, test_agent):
         args = json.dumps({
@@ -171,6 +238,52 @@ class TestExecuteTool:
             agent_id=test_agent.id,
             call_id=None,
             tool_name="book_appointment",
+            arguments=args,
+        )
+
+        data = json.loads(result)
+        assert data["success"] is True
+
+    def test_execute_lookup_customer_tool(self, db_session):
+        customer = Customer(
+            phone_number="1234567890",
+            name="John Doe",
+        )
+        db_session.add(customer)
+        db_session.commit()
+
+        args = json.dumps({"phone_number": "1234567890"})
+
+        result = execute_tool(
+            db=db_session,
+            agent_id=1,
+            call_id=None,
+            tool_name="lookup_customer",
+            arguments=args,
+        )
+
+        data = json.loads(result)
+        assert data["found"] is True
+        assert data["name"] == "John Doe"
+
+    def test_execute_transfer_to_human_tool(self, db_session, test_agent):
+        call = Call(
+            agent_id=test_agent.id,
+            caller_number="1234567890",
+            direction=CallDirection.INBOUND,
+            status=CallStatus.IN_PROGRESS,
+        )
+        db_session.add(call)
+        db_session.commit()
+        db_session.refresh(call)
+
+        args = json.dumps({"reason": "Customer requested"})
+
+        result = execute_tool(
+            db=db_session,
+            agent_id=test_agent.id,
+            call_id=call.id,
+            tool_name="transfer_to_human",
             arguments=args,
         )
 

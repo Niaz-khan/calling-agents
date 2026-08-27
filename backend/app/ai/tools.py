@@ -3,7 +3,9 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.models.call import Call, CallStatus
 from app.services.appointments import check_availability, create_appointment
+from app.services.customers import get_customer_by_phone
 
 
 TOOL_DEFINITIONS = [
@@ -58,6 +60,40 @@ TOOL_DEFINITIONS = [
                     },
                 },
                 "required": ["customer_name", "customer_phone", "start_time", "end_time"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "lookup_customer",
+            "description": "Look up a customer by their phone number to retrieve their information.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "phone_number": {
+                        "type": "string",
+                        "description": "Phone number to look up",
+                    },
+                },
+                "required": ["phone_number"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "transfer_to_human",
+            "description": "Transfer the call to a human agent when the customer requests it or the situation requires it.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "description": "Reason for the transfer",
+                    },
+                },
+                "required": ["reason"],
             },
         },
     },
@@ -120,6 +156,46 @@ def book_appointment(
         }
 
 
+def lookup_customer(
+    db: Session,
+    phone_number: str,
+) -> dict:
+    customer = get_customer_by_phone(db, phone_number)
+
+    if customer is None:
+        return {
+            "found": False,
+            "phone_number": phone_number,
+        }
+
+    return {
+        "found": True,
+        "customer_id": customer.id,
+        "name": customer.name,
+        "phone_number": customer.phone_number,
+        "email": customer.email,
+        "notes": customer.notes,
+    }
+
+
+def transfer_to_human(
+    db: Session,
+    call_id: int | None,
+    reason: str,
+) -> dict:
+    if call_id:
+        call = db.get(Call, call_id)
+        if call:
+            call.status = CallStatus.TRANSFERRED
+            db.commit()
+
+    return {
+        "success": True,
+        "message": "Transferring you to a human agent.",
+        "reason": reason,
+    }
+
+
 def execute_tool(
     db: Session,
     agent_id: int,
@@ -157,6 +233,21 @@ def execute_tool(
             start_time=start_time,
             end_time=end_time,
             notes=args.get("notes"),
+        )
+        return json.dumps(result)
+
+    elif tool_name == "lookup_customer":
+        result = lookup_customer(
+            db=db,
+            phone_number=args["phone_number"],
+        )
+        return json.dumps(result)
+
+    elif tool_name == "transfer_to_human":
+        result = transfer_to_human(
+            db=db,
+            call_id=call_id,
+            reason=args["reason"],
         )
         return json.dumps(result)
 
