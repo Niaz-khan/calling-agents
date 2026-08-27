@@ -23,6 +23,7 @@ async function request(method, path, body) {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      cache: 'no-store',
     })
   } catch {
     const networkError = new Error(
