@@ -1,9 +1,12 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 
 class AppointmentCreate(BaseModel):
+    agent_id: int
+
     customer_name: str = Field(
         min_length=1,
         max_length=255,
@@ -21,6 +24,16 @@ class AppointmentCreate(BaseModel):
     notes: str | None = None
 
 
+class AppointmentUpdate(BaseModel):
+    status: Literal["scheduled", "cancelled", "completed"] | None = None
+
+    start_time: datetime | None = None
+
+    end_time: datetime | None = None
+
+    notes: str | None = None
+
+
 class AppointmentResponse(BaseModel):
     id: int
     agent_id: int
@@ -32,3 +45,5 @@ class AppointmentResponse(BaseModel):
     status: str
     notes: str | None
     created_at: datetime
+
+    model_config = {"from_attributes": True}
