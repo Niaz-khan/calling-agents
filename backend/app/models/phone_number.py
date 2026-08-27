@@ -11,6 +11,12 @@ class PhoneNumber(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
     agent_id: Mapped[int] = mapped_column(
         ForeignKey("agents.id", ondelete="CASCADE"),
         nullable=False,
@@ -27,6 +33,12 @@ class PhoneNumber(Base):
     provider: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
+    )
+
+    provider_number_id: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        index=True,
     )
 
     is_active: Mapped[bool] = mapped_column(

@@ -50,3 +50,11 @@ class TextToSpeechProvider(Protocol):
     ) -> TTSResult:
         """Synthesize text into audio bytes."""
         ...
+
+
+@dataclass
+class VoiceTurnResult:
+    user_text: str
+    assistant_text: str
+    audio: bytes
+    content_type: str

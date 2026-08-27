@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     voice_heartbeat_seconds: int = 20
     voice_idle_timeout_seconds: int = 300
 
+    telephony_provider: str = "twilio"
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_from_number: str = ""
+    public_base_url: str = "http://localhost:8000"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
