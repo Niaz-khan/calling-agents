@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     twilio_from_number: str = ""
     public_base_url: str = "http://localhost:8000"
 
+    embedding_provider: str = "openai"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dimensions: int = 512
+
+    knowledge_search_limit: int = 5
+    knowledge_relevance_threshold: float = 0.30
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

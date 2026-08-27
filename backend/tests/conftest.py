@@ -2,9 +2,11 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.ai.embeddings import set_embedding_provider
 from app.database import Base
 from app.models.agent import Agent
 from app.models.user import User
+from tests.fake_embedding import FakeEmbeddingProvider
 
 
 SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///./test.db"
@@ -19,6 +21,13 @@ TestingSessionLocal = sessionmaker(
     autoflush=False,
     autocommit=False,
 )
+
+
+@pytest.fixture(autouse=True)
+def fake_embedding_provider():
+    set_embedding_provider(FakeEmbeddingProvider())
+    yield
+    set_embedding_provider(None)
 
 
 @pytest.fixture(scope="function")

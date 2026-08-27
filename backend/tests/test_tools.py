@@ -1,6 +1,8 @@
 import json
 from datetime import datetime, timedelta
 
+import pytest
+
 from app.ai.tools import (
     execute_tool,
     check_appointment_availability,
@@ -228,13 +230,14 @@ class TestTransferToHuman:
 
 
 class TestExecuteTool:
-    def test_execute_check_availability_tool(self, db_session, test_agent):
+    @pytest.mark.asyncio
+    async def test_execute_check_availability_tool(self, db_session, test_agent):
         args = json.dumps({
             "start_time": "2026-08-28T15:00:00",
             "end_time": "2026-08-28T15:30:00",
         })
 
-        result = execute_tool(
+        result = await execute_tool(
             db=db_session,
             agent_id=test_agent.id,
             call_id=None,
@@ -245,7 +248,8 @@ class TestExecuteTool:
         data = json.loads(result)
         assert data["available"] is True
 
-    def test_execute_book_appointment_tool(self, db_session, test_agent):
+    @pytest.mark.asyncio
+    async def test_execute_book_appointment_tool(self, db_session, test_agent):
         args = json.dumps({
             "customer_name": "John Doe",
             "customer_phone": "1234567890",
@@ -253,7 +257,7 @@ class TestExecuteTool:
             "end_time": "2026-08-28T15:30:00",
         })
 
-        result = execute_tool(
+        result = await execute_tool(
             db=db_session,
             agent_id=test_agent.id,
             call_id=None,
@@ -264,7 +268,8 @@ class TestExecuteTool:
         data = json.loads(result)
         assert data["success"] is True
 
-    def test_execute_lookup_customer_tool(self, db_session, test_agent, test_user):
+    @pytest.mark.asyncio
+    async def test_execute_lookup_customer_tool(self, db_session, test_agent, test_user):
         customer = Customer(
             owner_id=test_user.id,
             phone_number="1234567890",
@@ -275,7 +280,7 @@ class TestExecuteTool:
 
         args = json.dumps({"phone_number": "1234567890"})
 
-        result = execute_tool(
+        result = await execute_tool(
             db=db_session,
             agent_id=test_agent.id,
             call_id=None,
@@ -287,7 +292,8 @@ class TestExecuteTool:
         assert data["found"] is True
         assert data["name"] == "John Doe"
 
-    def test_execute_transfer_to_human_tool(self, db_session, test_agent):
+    @pytest.mark.asyncio
+    async def test_execute_transfer_to_human_tool(self, db_session, test_agent):
         call = Call(
             agent_id=test_agent.id,
             caller_number="1234567890",
@@ -300,7 +306,7 @@ class TestExecuteTool:
 
         args = json.dumps({"reason": "Customer requested"})
 
-        result = execute_tool(
+        result = await execute_tool(
             db=db_session,
             agent_id=test_agent.id,
             call_id=call.id,
@@ -311,10 +317,11 @@ class TestExecuteTool:
         data = json.loads(result)
         assert data["success"] is True
 
-    def test_rejects_unknown_tool(self, db_session, test_agent):
+    @pytest.mark.asyncio
+    async def test_rejects_unknown_tool(self, db_session, test_agent):
         args = json.dumps({})
 
-        result = execute_tool(
+        result = await execute_tool(
             db=db_session,
             agent_id=test_agent.id,
             call_id=None,
@@ -325,8 +332,9 @@ class TestExecuteTool:
         data = json.loads(result)
         assert "error" in data
 
-    def test_handles_invalid_json_arguments(self, db_session, test_agent):
-        result = execute_tool(
+    @pytest.mark.asyncio
+    async def test_handles_invalid_json_arguments(self, db_session, test_agent):
+        result = await execute_tool(
             db=db_session,
             agent_id=test_agent.id,
             call_id=None,

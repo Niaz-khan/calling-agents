@@ -7,6 +7,9 @@ from app.models.agent import Agent
 from app.models.call import Call, CallStatus
 from app.services.appointments import check_availability, create_appointment
 from app.services.customers import get_customer_by_phone
+from app.services.knowledge import (
+    search_knowledge_base as knowledge_search,
+)
 
 
 TOOL_DEFINITIONS = [
@@ -78,6 +81,30 @@ TOOL_DEFINITIONS = [
                     },
                 },
                 "required": ["phone_number"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_knowledge_base",
+            "description": (
+                "Search the business knowledge base for facts such as services, "
+                "pricing, opening hours, policies, addresses, FAQs, or any other "
+                "business-specific information. Use this tool whenever the customer "
+                "asks a question whose answer depends on business information that "
+                "you cannot know for certain. Returns the most relevant passages "
+                "from business documents."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "A concise search query summarizing the business information the customer asked for",
+                    },
+                },
+                "required": ["query"],
             },
         },
     },
@@ -198,7 +225,40 @@ def transfer_to_human(
     }
 
 
-def execute_tool(
+async def search_knowledge_base(
+    db: Session,
+    agent_id: int,
+    query: str,
+) -> dict:
+    if not query or not query.strip():
+        return {
+            "error": "Search query is required.",
+        }
+
+    result = knowledge_search(
+        db=db,
+        agent_id=agent_id,
+        query=query,
+    )
+
+    if result["found"]:
+        return result
+
+    if "message" in result:
+        return result
+
+    return {
+        "found": False,
+        "query": query,
+        "message": (
+            "No relevant business information was found in the knowledge base. "
+            "Do not guess or invent this information. If the customer needs it, "
+            "apologize and offer to help with something else or transfer to a human."
+        ),
+    }
+
+
+async def execute_tool(
     db: Session,
     agent_id: int,
     call_id: int | None,
@@ -254,6 +314,14 @@ def execute_tool(
             db=db,
             call_id=call_id,
             reason=args["reason"],
+        )
+        return json.dumps(result)
+
+    elif tool_name == "search_knowledge_base":
+        result = await search_knowledge_base(
+            db=db,
+            agent_id=agent_id,
+            query=args.get("query", ""),
         )
         return json.dumps(result)
 

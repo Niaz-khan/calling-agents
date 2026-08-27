@@ -52,7 +52,7 @@ async def run_agent(
         new_messages.append(assistant_msg)
 
         for tool_call in tool_calls:
-            result = execute_tool(
+            result = await execute_tool(
                 db=db,
                 agent_id=agent_id,
                 call_id=call_id,
