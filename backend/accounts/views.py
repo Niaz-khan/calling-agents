@@ -1,6 +1,6 @@
 from django.db import transaction
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -18,6 +18,8 @@ def _default_organization_name(user):
 
 class RegisterView(APIView):
     """Register a user and create their personal organization (OWNER)."""
+
+    permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = RegisterRequestSerializer(data=request.data)
@@ -50,6 +52,7 @@ class RegisterView(APIView):
 
 
 class LoginView(TokenObtainPairView):
+    permission_classes = [AllowAny]
     serializer_class = LoginSerializer
 
 
