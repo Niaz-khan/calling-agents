@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -138,7 +140,7 @@ async def send_message(call_id: int, data: MessageCreate, current_user: User = D
             )
 
     # 5. Run the AI agent
-    ai_response = await run_agent(
+    result = await run_agent(
         system_prompt=agent.system_prompt,
         conversation=conversation,
         db=db,
@@ -146,11 +148,35 @@ async def send_message(call_id: int, data: MessageCreate, current_user: User = D
         call_id=call.id,
     )
 
-    # 6. Save AI response
+    # 6. Save tool calls and results
+    for msg in result.messages:
+        if msg["role"] == "assistant":
+            tool_info = {
+                "tool_calls": msg.get("tool_calls", []),
+            }
+            if msg.get("content"):
+                tool_info["content"] = msg["content"]
+
+            assistant_message = CallMessage(
+                call_id=call.id,
+                role=MessageRole.ASSISTANT,
+                content=json.dumps(tool_info),
+            )
+            db.add(assistant_message)
+
+        elif msg["role"] == "tool":
+            tool_message = CallMessage(
+                call_id=call.id,
+                role=MessageRole.TOOL,
+                content=msg["content"],
+            )
+            db.add(tool_message)
+
+    # 7. Save final assistant response
     assistant_message = CallMessage(
         call_id=call.id,
         role=MessageRole.ASSISTANT,
-        content=ai_response,
+        content=result.response,
     )
 
     db.add(assistant_message)
@@ -159,5 +185,5 @@ async def send_message(call_id: int, data: MessageCreate, current_user: User = D
     return MessageResponse(
         call_id=call.id,
         role="assistant",
-        message=ai_response,
+        message=result.response,
     )

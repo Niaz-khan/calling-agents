@@ -24,7 +24,8 @@ class TestRunAgent:
                 agent_id=test_agent.id,
             )
 
-            assert result == "Hello! How can I help you?"
+            assert result.response == "Hello! How can I help you?"
+            assert result.messages == []
             mock_gen.assert_called_once()
 
     async def test_executes_tool_and_returns_final_response(self, db_session, test_agent):
@@ -59,7 +60,10 @@ class TestRunAgent:
                 agent_id=test_agent.id,
             )
 
-            assert result == "3 PM is available. Would you like me to book it?"
+            assert result.response == "3 PM is available. Would you like me to book it?"
+            assert len(result.messages) == 2
+            assert result.messages[0]["role"] == "assistant"
+            assert result.messages[1]["role"] == "tool"
             assert mock_gen.call_count == 2
 
     async def test_handles_multiple_tool_calls(self, db_session, test_agent):
@@ -112,7 +116,8 @@ class TestRunAgent:
                 agent_id=test_agent.id,
             )
 
-            assert result == "Your appointment has been booked successfully!"
+            assert result.response == "Your appointment has been booked successfully!"
+            assert len(result.messages) == 4
             assert mock_gen.call_count == 3
 
     async def test_returns_fallback_after_max_rounds(self, db_session, test_agent):
@@ -142,7 +147,8 @@ class TestRunAgent:
                 agent_id=test_agent.id,
             )
 
-            assert "trouble processing" in result
+            assert "trouble processing" in result.response
+            assert len(result.messages) == 10
             assert mock_gen.call_count == 5
 
     async def test_uses_default_prompt_when_none_provided(self, db_session, test_agent):
@@ -161,7 +167,7 @@ class TestRunAgent:
                 agent_id=test_agent.id,
             )
 
-            assert result == "I can help you with that."
+            assert result.response == "I can help you with that."
 
             call_args = mock_gen.call_args
             messages = call_args[0][0]

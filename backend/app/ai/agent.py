@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from sqlalchemy.orm import Session
 
 from app.ai.prompts import DEFAULT_AGENT_PROMPT
@@ -8,13 +10,19 @@ from app.ai.tools import TOOL_DEFINITIONS, execute_tool
 MAX_TOOL_ROUNDS = 5
 
 
+@dataclass
+class AgentResult:
+    response: str
+    messages: list[dict]
+
+
 async def run_agent(
     system_prompt: str | None,
     conversation: list[dict],
     db: Session,
     agent_id: int,
     call_id: int | None = None,
-) -> str:
+) -> AgentResult:
     prompt = system_prompt or DEFAULT_AGENT_PROMPT
 
     messages = [
@@ -22,19 +30,26 @@ async def run_agent(
         *conversation,
     ]
 
+    new_messages: list[dict] = []
+
     for _ in range(MAX_TOOL_ROUNDS):
         response = await generate_response(messages, tools=TOOL_DEFINITIONS)
 
         tool_calls = response.get("tool_calls", [])
 
         if not tool_calls:
-            return response["content"]
+            return AgentResult(
+                response=response["content"],
+                messages=new_messages,
+            )
 
-        messages.append({
+        assistant_msg = {
             "role": "assistant",
             "content": response.get("content") or None,
             "tool_calls": tool_calls,
-        })
+        }
+        messages.append(assistant_msg)
+        new_messages.append(assistant_msg)
 
         for tool_call in tool_calls:
             result = execute_tool(
@@ -45,10 +60,15 @@ async def run_agent(
                 arguments=tool_call["function"]["arguments"],
             )
 
-            messages.append({
+            tool_msg = {
                 "role": "tool",
                 "tool_call_id": tool_call["id"],
                 "content": result,
-            })
+            }
+            messages.append(tool_msg)
+            new_messages.append(tool_msg)
 
-    return "I apologize, but I'm having trouble processing your request. Please try again."
+    return AgentResult(
+        response="I apologize, but I'm having trouble processing your request. Please try again.",
+        messages=new_messages,
+    )
