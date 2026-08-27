@@ -3,14 +3,12 @@ services:
     image: postgres:17
     container_name: call-agent-postgres
     restart: unless-stopped
+    network_mode: host
 
     environment:
       POSTGRES_DB: callagent
       POSTGRES_USER: callagent
       POSTGRES_PASSWORD: callagent
-
-    ports:
-      - "5432:5432"
 
     volumes:
       - postgres_data:/var/lib/postgresql/data
