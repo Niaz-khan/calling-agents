@@ -141,6 +141,9 @@ async def send_message(call_id: int, data: MessageCreate, current_user: User = D
     ai_response = await run_agent(
         system_prompt=agent.system_prompt,
         conversation=conversation,
+        db=db,
+        agent_id=agent.id,
+        call_id=call.id,
     )
 
     # 6. Save AI response

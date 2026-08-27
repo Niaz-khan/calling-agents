@@ -46,6 +46,8 @@ async def chat_with_agent(agent_id: int, data: ChatRequest, current_user: User =
     response = await run_agent(
         system_prompt=agent.system_prompt,
         conversation=conversation,
+        db=db,
+        agent_id=agent.id,
     )
 
     return ChatResponse(
