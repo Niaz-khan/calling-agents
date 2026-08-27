@@ -4,6 +4,7 @@ from sqlalchemy import (
     JSON,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -17,14 +18,16 @@ from app.database import Base
 
 class KnowledgeBase(Base):
     __tablename__ = "knowledge_bases"
+    __table_args__ = (
+        UniqueConstraint("agent_id", name="knowledge_bases_agent_id_key"),
+        Index("ix_knowledge_bases_agent_id", "agent_id", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
     agent_id: Mapped[int] = mapped_column(
         ForeignKey("agents.id", ondelete="CASCADE"),
         nullable=False,
-        unique=True,
-        index=True,
     )
 
     name: Mapped[str] = mapped_column(
