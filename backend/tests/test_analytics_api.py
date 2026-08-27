@@ -188,8 +188,9 @@ class TestAnalyticsOverview:
         assert data["completed_calls"] == 2
         assert data["missed_calls"] == 1
         assert data["average_duration_seconds"] == pytest.approx(750.0, abs=0.01)
-        assert data["outcome_breakdown"]["appointment_booked"] == 1
-        assert data["outcome_breakdown"]["information_provided"] == 1
+        breakdown = {item["outcome"]: item["count"] for item in data["outcome_breakdown"]}
+        assert breakdown["appointment_booked"] == 1
+        assert breakdown["information_provided"] == 1
 
     def test_counts_appointments_and_customers(
         self, db_session, test_agent, test_user, auth_headers
@@ -262,7 +263,7 @@ class TestAnalyticsOverview:
         assert response.status_code == 200
         data = response.json()
         assert data["total_calls"] == 1
-        assert data["outcome_breakdown"] == {"appointment_booked": 1}
+        assert data["outcome_breakdown"] == [{"outcome": "appointment_booked", "count": 1}]
         assert len(data["recent_calls"]) == 1
         assert data["recent_calls"][0]["caller_number"] == "1111"
 

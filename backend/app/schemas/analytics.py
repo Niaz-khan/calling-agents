@@ -8,6 +8,11 @@ class CallCountByDay(BaseModel):
     count: int
 
 
+class OutcomeCount(BaseModel):
+    outcome: str
+    count: int
+
+
 class RecentCall(BaseModel):
     id: int
     agent_id: int
@@ -18,6 +23,7 @@ class RecentCall(BaseModel):
     outcome: str | None
     started_at: datetime
     ended_at: datetime | None
+    duration_seconds: int | None
 
 
 class AnalyticsOverview(BaseModel):
@@ -32,6 +38,6 @@ class AnalyticsOverview(BaseModel):
     total_agents: int
     appointments_scheduled: int
     appointments_cancelled: int
-    outcome_breakdown: dict[str, int]
+    outcome_breakdown: list[OutcomeCount]
     calls_last_7_days: list[CallCountByDay]
     recent_calls: list[RecentCall]

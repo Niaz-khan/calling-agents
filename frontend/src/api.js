@@ -1,4 +1,4 @@
-const API_BASE = ''
+const API_BASE = import.meta.env.VITE_API_BASE || ''
 
 function getToken() {
   return localStorage.getItem('token')
@@ -17,11 +17,20 @@ async function request(method, path, body) {
   const token = getToken()
   if (token) headers.Authorization = `Bearer ${token}`
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
+  let response
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+  } catch {
+    const networkError = new Error(
+      `Cannot reach the API (${method} ${path}). Is the backend running?`
+    )
+    networkError.status = 0
+    throw networkError
+  }
 
   if (response.status === 204) return null
 

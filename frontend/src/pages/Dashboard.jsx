@@ -122,7 +122,7 @@ export default function Dashboard() {
                         </Link>
                       </td>
                       <td>{call.agent_name}</td>
-                      <td>{call.phone_number}</td>
+                      <td>{call.caller_number}</td>
                       <td>{formatDate(call.started_at)}</td>
                       <td>{formatDuration(call.duration_seconds)}</td>
                     </tr>

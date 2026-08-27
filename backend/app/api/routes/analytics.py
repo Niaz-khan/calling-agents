@@ -14,6 +14,7 @@ from app.models.user import User
 from app.schemas.analytics import (
     AnalyticsOverview,
     CallCountByDay,
+    OutcomeCount,
     RecentCall,
 )
 
@@ -61,6 +62,15 @@ def analytics_overview(
             key = call.outcome.value
             outcome_breakdown[key] = outcome_breakdown.get(key, 0) + 1
 
+    outcome_counts = [
+        OutcomeCount(outcome=key, count=value)
+        for key, value in sorted(
+            outcome_breakdown.items(),
+            key=lambda pair: pair[1],
+            reverse=True,
+        )
+    ]
+
     today = datetime.now(timezone.utc).date()
 
     days = [today - timedelta(days=delta) for delta in range(6, -1, -1)]
@@ -101,6 +111,11 @@ def analytics_overview(
             outcome=call.outcome.value if call.outcome else None,
             started_at=call.started_at,
             ended_at=call.ended_at,
+            duration_seconds=(
+                int((call.ended_at - call.started_at).total_seconds())
+                if call.ended_at and call.started_at
+                else None
+            ),
         )
         for call in sorted(
             calls,
@@ -151,7 +166,7 @@ def analytics_overview(
         total_agents=total_agents,
         appointments_scheduled=appointments_scheduled,
         appointments_cancelled=appointments_cancelled,
-        outcome_breakdown=outcome_breakdown,
+        outcome_breakdown=outcome_counts,
         calls_last_7_days=calls_last_7_days,
         recent_calls=recent_calls,
     )
