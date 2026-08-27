@@ -82,6 +82,11 @@ INSTALLED_APPS = [
     "accounts",
     "tenancy",
     "agents",
+    "crm",
+    "telephony",
+    "conversations",
+    "knowledge",
+    "appointments",
     "core",
 ]
 
