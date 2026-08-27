@@ -20,6 +20,17 @@ class CallStatus(str, enum.Enum):
     TRANSFERRED = "transferred"
 
 
+class CallOutcome(str, enum.Enum):
+    APPOINTMENT_BOOKED = "appointment_booked"
+    APPOINTMENT_REQUESTED = "appointment_requested"
+    INFORMATION_PROVIDED = "information_provided"
+    CALLBACK_REQUESTED = "callback_requested"
+    TRANSFERRED_TO_HUMAN = "transferred_to_human"
+    NO_RESOLUTION = "no_resolution"
+    CUSTOMER_HUNG_UP = "customer_hung_up"
+    UNKNOWN = "unknown"
+
+
 class Call(Base):
     __tablename__ = "calls"
 
@@ -77,6 +88,11 @@ class Call(Base):
 
     summary: Mapped[str | None] = mapped_column(
         Text,
+        nullable=True,
+    )
+
+    outcome: Mapped[CallOutcome | None] = mapped_column(
+        Enum(CallOutcome),
         nullable=True,
     )
 

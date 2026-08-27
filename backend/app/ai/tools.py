@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.models.agent import Agent
 from app.models.call import Call, CallStatus
 from app.services.appointments import check_availability, create_appointment
 from app.services.customers import get_customer_by_phone
@@ -158,9 +159,10 @@ def book_appointment(
 
 def lookup_customer(
     db: Session,
+    owner_id: int,
     phone_number: str,
 ) -> dict:
-    customer = get_customer_by_phone(db, phone_number)
+    customer = get_customer_by_phone(db, owner_id, phone_number)
 
     if customer is None:
         return {
@@ -237,8 +239,12 @@ def execute_tool(
         return json.dumps(result)
 
     elif tool_name == "lookup_customer":
+        agent = db.get(Agent, agent_id)
+        owner_id = agent.owner_id if agent else None
+
         result = lookup_customer(
             db=db,
+            owner_id=owner_id,
             phone_number=args["phone_number"],
         )
         return json.dumps(result)

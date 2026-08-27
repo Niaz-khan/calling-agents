@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -11,10 +12,14 @@ from app.models.user import User
 from app.ai.agent import run_agent
 from app.auth.dependencies import get_current_user
 from app.models.call_message import CallMessage, MessageRole
+from app.services.customers import create_customer
+from app.services.call_intelligence import finalize_call, get_customer_memory
 from app.schemas.call import (
     CallCreate,
+    CallDetailResponse,
     CallResponse,
     MessageCreate,
+    MessageDetailResponse,
     MessageResponse,
 )
 
@@ -23,6 +28,23 @@ router = APIRouter(
     prefix="/calls",
     tags=["calls"],
 )
+
+
+def _get_user_call(
+    db: Session,
+    call_id: int,
+    user_id: int,
+) -> Call | None:
+    statement = (
+        select(Call)
+        .join(Agent, Agent.id == Call.agent_id)
+        .where(
+            Call.id == call_id,
+            Agent.owner_id == user_id,
+        )
+    )
+
+    return db.scalar(statement)
 
 
 @router.post(
@@ -53,8 +75,15 @@ def create_call(data: CallCreate, agent_id: int, current_user: User = Depends(ge
             detail="Invalid call direction",
         )
 
+    customer = create_customer(
+        db=db,
+        owner_id=current_user.id,
+        phone_number=data.caller_number,
+    )
+
     call = Call(
         agent_id=agent.id,
+        customer_id=customer.id,
         caller_number=data.caller_number,
         direction=direction,
         status=CallStatus.IN_PROGRESS,
@@ -66,19 +95,114 @@ def create_call(data: CallCreate, agent_id: int, current_user: User = Depends(ge
 
     return call
 
-@router.post("/{call_id}/messages", response_model=MessageResponse,)
-async def send_message(call_id: int, data: MessageCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db),):
-    # 1. Find the call through the user's agent
+
+@router.get("", response_model=list[CallResponse])
+def list_calls(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    agent_id: int | None = None,
+):
     statement = (
         select(Call)
         .join(Agent, Agent.id == Call.agent_id)
-        .where(
-            Call.id == call_id,
-            Agent.owner_id == current_user.id,
-        )
+        .where(Agent.owner_id == current_user.id)
+        .order_by(Call.started_at.desc())
     )
 
-    call = db.scalar(statement)
+    if agent_id:
+        statement = statement.where(Call.agent_id == agent_id)
+
+    calls = db.scalars(statement).all()
+    return calls
+
+
+@router.get("/{call_id}", response_model=CallDetailResponse)
+def get_call(
+    call_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    call = _get_user_call(db, call_id, current_user.id)
+
+    if call is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Call not found",
+        )
+
+    messages_statement = (
+        select(CallMessage)
+        .where(CallMessage.call_id == call.id)
+        .order_by(CallMessage.created_at.asc(), CallMessage.id.asc())
+    )
+
+    messages = db.scalars(messages_statement).all()
+
+    return CallDetailResponse(
+        id=call.id,
+        agent_id=call.agent_id,
+        customer_id=call.customer_id,
+        caller_number=call.caller_number,
+        direction=call.direction.value,
+        status=call.status.value,
+        outcome=call.outcome.value if call.outcome else None,
+        summary=call.summary,
+        started_at=call.started_at,
+        ended_at=call.ended_at,
+        messages=[
+            MessageDetailResponse(
+                id=m.id,
+                role=m.role.value,
+                content=m.content,
+                tool_call_id=m.tool_call_id,
+                created_at=m.created_at,
+            )
+            for m in messages
+        ],
+    )
+
+
+@router.get("/{call_id}/messages", response_model=list[MessageDetailResponse])
+def get_call_messages(
+    call_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    call = _get_user_call(db, call_id, current_user.id)
+
+    if call is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Call not found",
+        )
+
+    messages_statement = (
+        select(CallMessage)
+        .where(CallMessage.call_id == call.id)
+        .order_by(CallMessage.created_at.asc(), CallMessage.id.asc())
+    )
+
+    messages = db.scalars(messages_statement).all()
+
+    return [
+        MessageDetailResponse(
+            id=m.id,
+            role=m.role.value,
+            content=m.content,
+            tool_call_id=m.tool_call_id,
+            created_at=m.created_at,
+        )
+        for m in messages
+    ]
+
+
+@router.post("/{call_id}/end", response_model=CallResponse)
+async def end_call(
+    call_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    call = _get_user_call(db, call_id, current_user.id)
 
     if call is None:
         raise HTTPException(
@@ -92,7 +216,37 @@ async def send_message(call_id: int, data: MessageCreate, current_user: User = D
             detail="Call is not active",
         )
 
-    # 2. Load the agent
+    call.status = CallStatus.COMPLETED
+    call.ended_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(call)
+
+    try:
+        call = await finalize_call(db, call)
+    except Exception:
+        db.rollback()
+        db.refresh(call)
+
+    return call
+
+
+@router.post("/{call_id}/messages", response_model=MessageResponse,)
+async def send_message(call_id: int, data: MessageCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db),):
+    call = _get_user_call(db, call_id, current_user.id)
+
+    if call is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Call not found",
+        )
+
+    if call.status != CallStatus.IN_PROGRESS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Call is not active",
+        )
+
     agent = db.get(Agent, call.agent_id)
 
     if agent is None or not agent.is_active:
@@ -101,7 +255,6 @@ async def send_message(call_id: int, data: MessageCreate, current_user: User = D
             detail="Agent not found",
         )
 
-    # 3. Save user message
     user_message = CallMessage(
         call_id=call.id,
         role=MessageRole.USER,
@@ -111,7 +264,6 @@ async def send_message(call_id: int, data: MessageCreate, current_user: User = D
     db.add(user_message)
     db.commit()
 
-    # 4. Load conversation history
     history_statement = (
         select(CallMessage)
         .where(CallMessage.call_id == call.id)
@@ -120,7 +272,21 @@ async def send_message(call_id: int, data: MessageCreate, current_user: User = D
 
     history = db.scalars(history_statement).all()
 
-    conversation = []
+    conversation: list[dict] = []
+
+    memory = get_customer_memory(db, call)
+
+    if memory:
+        conversation.append(
+            {
+                "role": "system",
+                "content": (
+                    "These are notes about this customer from previous calls. "
+                    "Use them to provide personalized service.\n\n"
+                    f"{memory}"
+                ),
+            }
+        )
 
     for message in history:
         if message.role == MessageRole.USER:
@@ -132,14 +298,41 @@ async def send_message(call_id: int, data: MessageCreate, current_user: User = D
             )
 
         elif message.role == MessageRole.ASSISTANT:
+            if message.tool_call_id is not None:
+                continue
+
+            try:
+                payload = json.loads(message.content)
+            except json.JSONDecodeError:
+                payload = None
+
+            tool_calls = payload.get("tool_calls") if payload else None
+
+            if tool_calls:
+                conversation.append(
+                    {
+                        "role": "assistant",
+                        "content": payload.get("content"),
+                        "tool_calls": tool_calls,
+                    }
+                )
+            else:
+                conversation.append(
+                    {
+                        "role": "assistant",
+                        "content": message.content,
+                    }
+                )
+
+        elif message.role == MessageRole.TOOL:
             conversation.append(
                 {
-                    "role": "assistant",
+                    "role": "tool",
+                    "tool_call_id": message.tool_call_id,
                     "content": message.content,
                 }
             )
 
-    # 5. Run the AI agent
     result = await run_agent(
         system_prompt=agent.system_prompt,
         conversation=conversation,
@@ -148,7 +341,6 @@ async def send_message(call_id: int, data: MessageCreate, current_user: User = D
         call_id=call.id,
     )
 
-    # 6. Save tool calls and results
     for msg in result.messages:
         if msg["role"] == "assistant":
             tool_info = {
@@ -169,10 +361,10 @@ async def send_message(call_id: int, data: MessageCreate, current_user: User = D
                 call_id=call.id,
                 role=MessageRole.TOOL,
                 content=msg["content"],
+                tool_call_id=msg.get("tool_call_id"),
             )
             db.add(tool_message)
 
-    # 7. Save final assistant response
     assistant_message = CallMessage(
         call_id=call.id,
         role=MessageRole.ASSISTANT,

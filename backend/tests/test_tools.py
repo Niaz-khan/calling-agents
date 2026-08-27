@@ -145,8 +145,9 @@ class TestBookAppointment:
 
 
 class TestLookupCustomer:
-    def test_finds_existing_customer(self, db_session):
+    def test_finds_existing_customer(self, db_session, test_user):
         customer = Customer(
+            owner_id=test_user.id,
             phone_number="1234567890",
             name="John Doe",
             email="john@example.com",
@@ -156,6 +157,7 @@ class TestLookupCustomer:
 
         result = lookup_customer(
             db=db_session,
+            owner_id=test_user.id,
             phone_number="1234567890",
         )
 
@@ -163,9 +165,27 @@ class TestLookupCustomer:
         assert result["name"] == "John Doe"
         assert result["email"] == "john@example.com"
 
-    def test_returns_not_found_for_unknown_number(self, db_session):
+    def test_does_not_find_customer_of_other_owner(self, db_session, test_user):
+        customer = Customer(
+            owner_id=test_user.id,
+            phone_number="1234567890",
+            name="John Doe",
+        )
+        db_session.add(customer)
+        db_session.commit()
+
         result = lookup_customer(
             db=db_session,
+            owner_id=999,
+            phone_number="1234567890",
+        )
+
+        assert result["found"] is False
+
+    def test_returns_not_found_for_unknown_number(self, db_session, test_user):
+        result = lookup_customer(
+            db=db_session,
+            owner_id=test_user.id,
             phone_number="9999999999",
         )
 
@@ -244,8 +264,9 @@ class TestExecuteTool:
         data = json.loads(result)
         assert data["success"] is True
 
-    def test_execute_lookup_customer_tool(self, db_session):
+    def test_execute_lookup_customer_tool(self, db_session, test_agent, test_user):
         customer = Customer(
+            owner_id=test_user.id,
             phone_number="1234567890",
             name="John Doe",
         )
@@ -256,7 +277,7 @@ class TestExecuteTool:
 
         result = execute_tool(
             db=db_session,
-            agent_id=1,
+            agent_id=test_agent.id,
             call_id=None,
             tool_name="lookup_customer",
             arguments=args,

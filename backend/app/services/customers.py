@@ -4,8 +4,13 @@ from sqlalchemy.orm import Session
 from app.models.customer import Customer
 
 
-def get_customer_by_phone(db: Session, phone_number: str) -> Customer | None:
+def get_customer_by_phone(
+    db: Session,
+    owner_id: int,
+    phone_number: str,
+) -> Customer | None:
     statement = select(Customer).where(
+        Customer.owner_id == owner_id,
         Customer.phone_number == phone_number,
     )
 
@@ -14,12 +19,13 @@ def get_customer_by_phone(db: Session, phone_number: str) -> Customer | None:
 
 def create_customer(
     db: Session,
+    owner_id: int,
     phone_number: str,
     name: str | None = None,
     email: str | None = None,
     notes: str | None = None,
 ) -> Customer:
-    existing = get_customer_by_phone(db, phone_number)
+    existing = get_customer_by_phone(db, owner_id, phone_number)
 
     if existing:
         if name:
@@ -33,6 +39,7 @@ def create_customer(
         return existing
 
     customer = Customer(
+        owner_id=owner_id,
         phone_number=phone_number,
         name=name,
         email=email,
