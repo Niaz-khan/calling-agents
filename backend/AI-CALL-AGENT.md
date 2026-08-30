@@ -4,7 +4,7 @@
 
 **Version:** 1.0.0  
 **Status:** Active Development  
-**Stage:** Backend Foundation → AI Agent → Voice Integration
+**Stage:** Backend Foundation → AI Agent → Multi-Channel Platform (Website + API + Phone)
 
 ---
 
@@ -154,12 +154,11 @@ Caller
 ## Backend
 
 * Python
-* FastAPI
-* SQLAlchemy
-* Alembic
-* PostgreSQL
-* Pydantic
-* JWT authentication
+* Django 6 + Django REST Framework
+* PostgreSQL (Django migrations)
+* JWT authentication (SimpleJWT)
+* httpx (LLM + telephony + STT providers)
+* edge-tts (keyless neural TTS)
 
 ## AI
 
@@ -200,7 +199,7 @@ Ubuntu
 Docker
 Docker Compose
 PostgreSQL
-FastAPI
+Django (runserver / gunicorn)
 ```
 
 Production will eventually use:
@@ -237,50 +236,40 @@ Frontend technology can be finalized later.
 
 # 5. Current Backend Architecture
 
-Current approximate structure:
+Current Django structure:
 
 ```text
-app/
+backend/
 │
-├── ai/
-│   ├── __init__.py
-│   ├── provider.py
-│   ├── prompts.py
-│   ├── agent.py
-│   └── tools.py
+├── accounts/       │  org/tenancy/  │  agents/        │  ai/
+│   register,login  │  Organization  │  Agent,         │  provider.py
+│   JWT             │  membership    │  AgentDeployment│  prompts.py
+│                   │               │  public chat,   │  agent.py
+│                   │               │  widget         │  tools.py
 │
-├── api/
-│   └── routes/
-│       ├── auth.py
-│       ├── agents.py
-│       ├── chat.py
-│       └── calls.py
+├── conversations/  │  crm/          │  appointments/  │  knowledge/
+│   Conversation    │  Customer      │  services+tools │  RAG / embeddings
+│   ConversationMsg │  memory        │                 │
+│   PhoneCall       │               │                 │
+│   call_intel      │               │                 │
 │
-├── auth/
-│   ├── dependencies.py
-│   └── security.py
+├── telephony/      │  voice/        │  analytics/     │  core/
+│   providers/      │  stt, tts,     │  metrics        │  health
+│   (twilio,        │  session engine│                 │  checks
+│    telnyx)        │               │                 │
+│   webhooks        │               │                 │
 │
-├── models/
-│   ├── user.py
-│   ├── agent.py
-│   ├── call.py
-│   ├── call_message.py
-│   └── appointment.py
-│
-├── schemas/
-│   ├── auth.py
-│   ├── agent.py
-│   ├── call.py
-│   ├── chat.py
-│   └── appointment.py
-│
-├── services/
-│   └── appointments.py
-│
-├── config.py
-├── database.py
-└── main.py
+├── config/         │  manage.py     │  conftest.py    │  pytest.ini
+└── requirements.txt│  .env.example  │  test.db
 ```
+
+Key rules:
+
+* Channel-agnostic `Conversation` (phone / website / api) is the single memory
+  vault; `PhoneCall` is an optional phone-only profile.
+* `run_agent_turn()` is shared by phone, website and API channels.
+* Telephony (Twilio + Telnyx) sits behind `telephony/providers/`.
+* LLM, STT and TTS each sit behind provider abstractions.
 
 This structure can evolve.
 
@@ -605,7 +594,7 @@ The correct architecture is:
                   |
                   | Tool Request
                   v
-             FastAPI Agent
+             Agent Orchestrator
                   |
                   | Validate
                   v
@@ -1081,7 +1070,7 @@ Internet
 Nginx
    |
    v
-FastAPI
+Django (gunicorn / ASGI)
    |
    +---- PostgreSQL
    |
@@ -1245,10 +1234,10 @@ Conversion rate
 
 ## Phase 1 — Foundation
 
-* [x] FastAPI
+* [x] Django + DRF (migrated from FastAPI prototype)
 * [x] PostgreSQL
 * [x] Docker
-* [x] Alembic
+* [x] Django migrations
 * [x] Health endpoints
 * [x] Authentication
 * [x] JWT
@@ -1327,23 +1316,129 @@ incremental.
 * [ ] Security review
 * [ ] Load testing
 
+## Phase 8 — Multi-Channel Website & API (completed milestone)
+
+Every channel runs through the same `Conversation` abstraction — phone, website
+and API conversations persist through one message/transcript/memory path. No
+separate chatbot memory system was built: a deployment simply points a public
+channel at an existing agent.
+
+* [x] `AgentDeployment` model (channel, `public_identifier` `pub_…`, `allowed_domains`, `enabled`)
+* [x] Deployment management API (`/deployments`, org-scoped CRUD, agent ownership enforced)
+* [x] Public no-JWT chat API (`POST|GET /public/chat/{pub_id}`)
+* [x] Visitor identity via `X-Visitor-ID` + conversation continuity per (deployment, visitor_id)
+* [x] `Conversation.visitor_id` for web/API sessions; phone keeps its `PhoneCall` profile
+* [x] Website widget (`/widget.js`) + live demo page (`/widget`)
+* [x] Allowed-domain enforcement + per-endpoint CORS/preflight (`django-cors-headers` scoped away from `/public/`)
+* [x] Message length + input validation; unknown/disabled/channel-mismatched deployments return 404
+* [x] Tests: deployments CRUD, public chat, domain policy, visitor reuse, 503 handling (157 passing)
+
+## Phase 9 — Production Website Channel (next)
+
+Make the website channel production-grade and sellable before spending on telephony:
+
+* [ ] Production-grade widget (responsive, loading/typing state, error handling)
+* [ ] Agent/business branding (name, logo, avatar), configurable colors, welcome message
+* [ ] Rate limiting / request throttling on public endpoints
+* [ ] Abuse protection and stricter origin validation
+* [ ] Customer-facing agent configuration (business hours, appointment services, knowledge base picker)
+* [ ] Dashboard deployment UI (install-snippet generator + copy button)
+* [ ] Website analytics (unique visitors, conversation length, tool calls, appointments booked)
+* [ ] Online/offline presence handling
+
 ---
 
 # 34. Current Task
 
 ## CURRENT PHASE
 
-**Phase 4 — Voice / Telephony**
+**Phase 9 — Production Website Channel**
+
+(Milestone behind us: Phase 8 multi-channel website + API foundation, the shared
+conversation engine, deployment management, public chat API and widget.)
 
 ## CURRENT OBJECTIVE
 
-Take the text AI agent live over the phone.
+Make the website channel production-grade and sellable before spending on
+telephony: a business deploys an agent on its website in minutes, then connects
+a phone number later.
 
-Phase 4 foundation is implemented and live-tested end to end (TwiML speech-gather
-loop, STT via Groq whisper, free Edge neural TTS, telephony provider, call
-lifecycle and status normalization). What remains is the Twilio-owned
-increments (Media Streams audio streaming, recording) and a real Twilio number
-to verify against.
+### Multi-channel architecture
+
+```text
+                    Django Backend
+                         │
+          ┌──────────────┴──────────────┐
+          │                             │
+    Private APIs                   Public APIs (no JWT)
+    (JWT auth)                         │
+          │                       Deployments
+          │                             │
+          │                    ┌────────┴────────┐
+          │                    │                 │
+          ▼                    ▼                 ▼
+   Dashboard / org         Website          API integration
+   (agents, calls,         widget
+   customers, appointments, knowledge)
+
+          │                    │
+          └────────┬───────────┘
+                   ▼
+          Shared Conversation
+          (channel = phone | website | api)
+                   │
+                   ▼
+        Agent + LLM + Tools + RAG
+                   │
+                   ▼
+              PostgreSQL
+```
+
+The `Conversation` model is the single memory vault for every channel. It keeps
+a `channel` (`phone`/`website`/`api`), an optional `deployment` link, a
+`visitor_id` for web/API sessions, and the shared `messages` (`USER`,
+`ASSISTANT`, `TOOL`, `SYSTEM`) transcript. Phone-only state (provider call id,
+caller number, provider status, recording URL) lives in the one-to-one
+`PhoneCall` profile. `run_agent_turn()` is channel-agnostic — phone and website
+visitors run the exact same agent loop, tool registry, RAG and appointment
+tools.
+
+### Public surface (no business JWT)
+
+| Endpoint                                        | Purpose                                          |
+| ----------------------------------------------- | ------------------------------------------------ |
+| `POST /public/chat/{pub_id}`                    | Visitor sends a message; runs the agent.         |
+| `GET  /public/chat/{pub_id}`                    | Fetch the visitor's open-conversation transcript.|
+| `POST/GET/OPTIONS` (CORS + preflight)           | Handled per-endpoint for allowed origins.        |
+| `GET  /widget.js`                               | Embeddable site widget (vanilla JS).             |
+| `GET  /widget`                                  | Live demo / install-preview page.                |
+
+Public identity is a client-generated `X-Visitor-ID` (no credentials). A
+returning visitor with the same id continues their open conversation. A
+`deployment`'s `public_identifier` (`pub_…`) is the bearer-like token that maps
+a caller to the right organization + agent, never an internal id.
+
+### Origin / abuse policy
+
+* `allowed_domains = []` → any origin accepted (default, open).
+* `allowed_domains` set → browsers from other origins get `403`/no CORS; API
+  and non-browser callers still work.
+* Unknown, disabled, inactive-org, or non-public-channel identifiers → `404`
+  (no existence disclosure).
+* Message bodies are length-validated; the agent turn surfaces `503` on LLM
+  failure without leaking internals.
+
+### Phone stays intact
+
+The Twilio flow (`/telephony/webhook/inbound|status|gather`), the
+`TelephonyProvider` abstraction (Twilio **and** Telnyx implementations in
+`telephony/providers/`), and the existing call lifecycle are unchanged and
+covered by the same test suite.
+
+### Test status
+
+157 passing tests (deployments, public chat, domain policy, visitor reuse, 503
+handling, telephony, voice, appointments, tool calling, RAG, auth/tenancy).
 
 ## GO LIVE WITH TWILIO
 
@@ -1693,14 +1788,19 @@ Agent management                    ██████████████�
 Call management                     ████████████████████ 100%
 Conversation memory                 ████████████████████ 100%
 Customer memory                     ████████████████████ 100%
-Basic LLM                           ██████████████████░░  90%  (live call pending a real API key)
+Basic LLM                           ████████████████████ 100%
 Tool calling (5 tools)              ████████████████████ 100%
 Call intelligence (summary/outcome) ████████████████████ 100%
 Appointments                        ████████████████████ 100%
 Dashboard (React)                   ████████████████████ 100%
 RAG (knowledge base)                ████████████████████ 100%
 Vector database                     ░░░░░░░░░░░░░░░░░░░░   0%
-Voice / telephony                   ░░░░░░░░░░░░░░░░░░░░   0%
+Deployment management (/deployments)████████████████████ 100%
+Public chat API (/public/chat)      ████████████████████ 100%
+Website widget (/widget.js)         ████████████████████ 100%
+Domain policy + CORS                ████████████████████ 100%
+Rate limiting (public endpoints)    ░░░░░░░░░░░░░░░░░░░░   0%
+Voice / telephony (foundation)      ██████████████████░░  90%  (live call pending a Twilio number)
 Production                          ░░░░░░░░░░░░░░░░░░░░   0%
 ```
 
@@ -1708,16 +1808,22 @@ Production                          ░░░░░░░░░░░░░░�
 
 # 40. Immediate Next Action
 
-LLM tool calling is implemented and tested (eligibility check, booking, customer
-lookup, knowledge search, human transfer plus call summary/outcome and customer
-memory). Three things remain:
+Phase 8 (multi-channel website + API) is complete with 157 passing tests. The
+website channel is the current focus:
 
-1. Validate the live end-to-end flow with a real LLM API key
-   (the current ``LLM_API_KEY`` is a placeholder).
-2. Optionally import existing FastAPI data:
-   ``manage.py import_legacy_users`` then ``manage.py import_legacy_data``.
-3. Only then begin Phase 4 — the voice/telephony layer. Per AGENTS.md, it is
-   out of scope until explicitly requested.
+1. Harden the public surface: rate limiting/throttling, stricter origin
+   validation, abuse protection on `/public/chat`.
+2. Upgrade the widget to production quality (branding, colors, welcome message,
+   typing/error states, responsive layout).
+3. Add customer-facing agent configuration and the dashboard deployment UI
+   (install-snippet generator).
+4. Begin website analytics (unique visitors, conversation length, tool calls,
+   appointments booked).
+
+Telephony live verification remains gated on purchasing a Twilio number (the
+trial account cannot attach custom webhooks to calls). The Twilio code path and
+Telnyx fallback provider are implemented and tested; once a number exists they
+follow the F.34 go-live steps.
 
 ````
 
