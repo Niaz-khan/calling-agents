@@ -1333,33 +1333,130 @@ incremental.
 
 ## CURRENT PHASE
 
-**Phase 3 — AI Agent**
+**Phase 4 — Voice / Telephony**
 
 ## CURRENT OBJECTIVE
 
-Build a reliable tool-calling system.
+Take the text AI agent live over the phone.
 
-The immediate implementation order is:
+Phase 4 foundation is implemented and live-tested end to end (TwiML speech-gather
+loop, STT via Groq whisper, free Edge neural TTS, telephony provider, call
+lifecycle and status normalization). What remains is the Twilio-owned
+increments (Media Streams audio streaming, recording) and a real Twilio number
+to verify against.
 
-```text
-1. Tool schema
-2. Tool registry
-3. LLM tool definitions
-4. LLM tool-call detection
-5. Backend tool execution
-6. Tool result injection
-7. Second LLM pass
-8. Final response
-9. Save all messages
-10. Test end-to-end
-```
+## GO LIVE WITH TWILIO
 
-The first tools are:
+The app is ready to answer calls once a Twilio account and number are provisioned.
+
+### 1. Configure `.env`
 
 ```text
-check_appointment_availability
-book_appointment
+TELEPHONY_PROVIDER=twilio
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=your_auth_token
+TWILIO_FROM_NUMBER=+1xxxxxxxxxx        # your Twilio number
+PUBLIC_BASE_URL=https://your-public-host.example
 ```
+
+`PUBLIC_BASE_URL` must be HTTPS and reachable from the internet. Twilio only
+delivers webhooks over HTTPS, and TwiML response URLs are built from this value.
+
+### 2. Register the number in the app
+
+Create an agent and attach the Twilio number to it:
+
+```text
+POST /agents                          # create an agent (system_prompt etc.)
+POST /phone-numbers
+{
+  "phone_number": "+1xxxxxxxxxx",
+  "agent_id": 1,
+  "provider": "twilio",
+  "provider_number_id": "PNxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+}
+```
+
+Only active numbers mapped to an active agent are answered. Callers of any
+other number get an immediate hang-up.
+
+### 3. Point the Twilio number at the webhooks
+
+In the Twilio console, open the bought number's **Voice** settings and set:
+
+| Setting              | Value                                                   |
+| -------------------- | ------------------------------------------------------- |
+| A call comes in      | `https://<PUBLIC_BASE_URL>/telephony/webhook/inbound`   |
+| Status callback URL  | `https://<PUBLIC_BASE_URL>/telephony/webhook/status`    |
+
+Both must use **POST**. Requests are authenticated with
+`X-Twilio-Signature` (verified against `TWILIO_AUTH_TOKEN`).
+
+The webhook and gather URLs must share the same base host as
+`PUBLIC_BASE_URL`; the signature is verified against the exact request URL.
+
+### 4. Expected call flow
+
+```text
+Caller dials number
+   |
+   v
+Twilio -> POST /telephony/webhook/inbound
+   |
+   v
+resolve PhoneNumber -> create Conversation + PhoneCall (RINGING)
+   |
+   v
+TwiML: Say greeting -> Gather input="speech"
+   |
+   v
+   +------------ caller speaks --------------+
+   |                                          |
+   v                                          |
+POST /telephony/webhook/gather               |
+   |                                          |
+   v                                          |
+run_agent_turn(text)                         |
+   |                                          |
+   v                                          |
+TwiML: Say agent reply -> Gather             |
+   |                                          |
+   +--------------------+---------------------+
+                        |
+                       caller hangs up
+                        |
+                        v
+Twilio -> POST /telephony/webhook/status (completed)
+   |
+   v
+apply_provider_status -> finalize_call -> summary + outcome
+   |
+   v
+PostgreSQL: transcript, summary, outcome, customer memory
+```
+
+### 5. Verification
+
+```bash
+pytest
+alembic check           # empty: no pending migrations
+curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/db-health
+```
+
+Then call the Twilio number and check `/calls` in Swagger for the new
+conversation, transcript, summary and outcome.
+
+### 6. Remaining Phase 4 items
+
+* [ ] **Audio streaming** — Twilio Media Streams websocket ([`<Connect><Stream>`])
+      replaces the utterance-level Gather loop with real-time audio. Needs the
+      mu-law codec and a websocket transport on top of the existing
+      `VoiceSessionEngine`.
+* [ ] **Call recording** — save Twilio recording URLs onto `PhoneCall.recording_url`
+      and expose them in the transcript flow.
+
+---
 
 ---
 
