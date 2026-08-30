@@ -10,5 +10,6 @@ urlpatterns = [
     path("", include("telephony.urls")),
     path("", include("conversations.urls")),
     path("", include("knowledge.urls")),
+    path("", include("analytics.urls")),
     path("", include("core.urls")),
 ]
