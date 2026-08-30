@@ -1,10 +1,6 @@
-"""Django settings for the AI Call Agent platform.
+"""Django settings for the AI Call Agent platform."""
 
-Environment-driven configuration. The project reads secrets and configuration
-from the ``backend/.env`` file (and/or the process environment), keeping the
-same variable names the legacy FastAPI backend used where practical.
-"""
-
+import datetime
 import os
 from pathlib import Path
 
@@ -12,17 +8,14 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load backend/.env unless the environment already provides values.
 load_dotenv(BASE_DIR / ".env")
 
 
 def env(key, default=None):
-    """Read an environment variable, returning ``default`` when absent."""
     return os.environ.get(key, default)
 
 
 def env_list(key, default=None):
-    """Read a comma-separated env list."""
     value = env(key)
     if value is None:
         return default
@@ -30,13 +23,7 @@ def env_list(key, default=None):
 
 
 def parse_database_url(url):
-    """Parse a SQLAlchemy-style DATABASE_URL into Django DATABASES options.
-
-    Accepts ``postgresql://user:pass@host:port/dbname`` and the psycopg
-    flavour ``postgresql+psycopg://...`` used by the legacy .env.
-    """
-    if not url:
-        raise RuntimeError("DATABASE_URL is required")
+    """Parse a SQLAlchemy-style DATABASE_URL into Django DATABASES options."""
     url = url.replace("postgresql+psycopg://", "postgres://", 1).replace(
         "postgresql://", "postgres://", 1
     )
@@ -59,16 +46,13 @@ def parse_database_url(url):
     }
 
 
-# ---------------------------------------------------------------------------
-# Core Django
-# ---------------------------------------------------------------------------
-
 SECRET_KEY = env("DJANGO_SECRET_KEY", env("JWT_SECRET_KEY", "insecure-dev-key"))
 DEBUG = env("DJANGO_DEBUG", "1") == "1"
-ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", ["localhost", "127.0.0.1", "0.0.0.0", "[::1]"])
+ALLOWED_HOSTS = env_list(
+    "DJANGO_ALLOWED_HOSTS", ["localhost", "127.0.0.1", "0.0.0.0", "[::1]"]
+)
 
 INSTALLED_APPS = [
-    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -78,15 +62,14 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "corsheaders",
-    "channels",
     "accounts",
     "tenancy",
     "agents",
     "crm",
-    "telephony",
     "conversations",
-    "knowledge",
     "appointments",
+    "knowledge",
+    "telephony",
     "analytics",
     "core",
 ]
@@ -119,16 +102,31 @@ TEMPLATES = [
     },
 ]
 
+WSGI_APPLICATION = "config.wsgi.application"
+
 DATABASES = {
-    "default": parse_database_url(env("DATABASE_URL", "postgresql://callagent:callagent@localhost:5432/callagent")),
+    "default": parse_database_url(
+        env(
+            "DATABASE_URL",
+            "postgresql://callagent:callagent@localhost:5432/callagent",
+        )
+    ),
 }
 
-# Custom user model (email-based). Must be set before the first migration so
-# the auth tables adopt the project's user from the start.
-AUTH_USER_MODEL = "accounts.User"
-
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 6}},
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 6},
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+    },
 ]
 
 LANGUAGE_CODE = "en-us"
@@ -160,30 +158,26 @@ CORS_ALLOWED_ORIGINS = env_list(
 # Django REST Framework + JWT
 # ---------------------------------------------------------------------------
 
-import datetime  # noqa: E402
-
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
-    ],
-    "DEFAULT_RENDERER_CLASSES": [
-        "rest_framework.renderers.JSONRenderer",
+        "rest_framework.permissions.AllowAny",
     ],
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": datetime.timedelta(minutes=int(env("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))),
+    "ACCESS_TOKEN_LIFETIME": datetime.timedelta(
+        minutes=int(env("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+    ),
     "ALGORITHM": env("JWT_ALGORITHM", "HS256"),
     "SIGNING_KEY": SECRET_KEY,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
 # ---------------------------------------------------------------------------
-# Service configuration (AI / voice / telephony). Populated by later phases.
-# Kept here so all modules read configuration from django.conf.settings.
+# Application-level configuration
 # ---------------------------------------------------------------------------
 
 APP_NAME = env("APP_NAME", "AI Call Agent")
@@ -217,17 +211,3 @@ EMBEDDING_MODEL = env("EMBEDDING_MODEL", "text-embedding-3-small")
 EMBEDDING_DIMENSIONS = int(env("EMBEDDING_DIMENSIONS", "512"))
 KNOWLEDGE_SEARCH_LIMIT = int(env("KNOWLEDGE_SEARCH_LIMIT", "5"))
 KNOWLEDGE_RELEVANCE_THRESHOLD = float(env("KNOWLEDGE_RELEVANCE_THRESHOLD", "0.30"))
-
-# ---------------------------------------------------------------------------
-# Channels / ASGI
-# ---------------------------------------------------------------------------
-
-ASGI_APPLICATION = "config.asgi.application"
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer",
-    },
-}
-
-# Redis channel layer is enabled in production (D10) via CHANNEL_LAYER_URL.
-REDIS_URL = env("REDIS_URL", "")
