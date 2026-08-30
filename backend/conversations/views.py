@@ -5,11 +5,9 @@ from rest_framework.response import Response
 
 from agents.models import Agent
 from ai.provider import LLMError
-from appointments.models import Appointment
 from conversations.models import (
     Conversation,
     ConversationChannel,
-    ConversationOutcome,
     ConversationStatus,
     PhoneCall,
     PhoneCallStatus,
@@ -17,6 +15,7 @@ from conversations.models import (
 from crm.models import Customer
 from tenancy.drf import OrganizationModelViewSet
 
+from .call_intelligence import classify_call_outcome, finalize_call
 from .serializers import (
     CallDetailSerializer,
     CallListSerializer,
@@ -142,15 +141,17 @@ class CallViewSet(OrganizationModelViewSet):
         conversation = self.get_object()
         phone_call = conversation.phone_call
         conversation.close()
-        if conversation.outcome is None:
-            conversation.outcome = self._classify_outcome(conversation)
-        conversation.save()
-        phone_call.provider_status = PhoneCallStatus.COMPLETED
-        phone_call.save(update_fields=["provider_status"])
+        try:
+            finalize_call(conversation)
+        except LLMError:
+            if conversation.outcome is None:
+                conversation.outcome = classify_call_outcome(conversation)
+            conversation.save()
+        if phone_call is not None and phone_call.provider_status not in (
+            PhoneCallStatus.TRANSFERRED,
+            PhoneCallStatus.COMPLETED,
+            PhoneCallStatus.FAILED,
+        ):
+            phone_call.provider_status = PhoneCallStatus.COMPLETED
+            phone_call.save(update_fields=["provider_status"])
         return Response(CallSerializer(conversation).data)
-
-    @staticmethod
-    def _classify_outcome(conversation):
-        if Appointment.objects.filter(conversation=conversation).exists():
-            return ConversationOutcome.APPOINTMENT_BOOKED
-        return ConversationOutcome.UNKNOWN

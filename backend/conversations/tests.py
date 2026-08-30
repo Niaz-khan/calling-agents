@@ -231,6 +231,42 @@ class TestSendMessage:
         assert second.status_code == 200
         assert second.json()["message"] == "Would you like to book it?"
 
+    def test_customer_memory_injected_into_history(self, tenant, monkeypatch):
+        _, org, client = tenant
+        agent = _agent(org)
+        conversation = _conv(org, agent, status=PhoneCallStatus.IN_PROGRESS)
+        from crm.models import Customer
+
+        customer = Customer.objects.create(
+            organization=org,
+            phone_number="+15553334444",
+            name="Jane",
+            memory="Customer prefers morning appointments.",
+        )
+        conversation.customer = customer
+        conversation.save(update_fields=["customer"])
+
+        seen = {}
+
+        def fake(messages, tools=None):
+            seen["messages"] = messages
+            return {"content": "Hello!", "tool_calls": []}
+
+        monkeypatch.setattr("ai.agent.generate_response", fake)
+
+        response = self._post(client, conversation.id, "I need help")
+        assert response.status_code == 200
+
+        sent = seen["messages"]
+        system_notes = [
+            message
+            for message in sent
+            if message["role"] == "system"
+            and "Customer prefers morning appointments." in message["content"]
+        ]
+        assert system_notes
+        assert sent[-1] == {"role": "user", "content": "I need help"}
+
     def test_message_rejected_when_call_closed(self, tenant, monkeypatch):
         _, org, client = tenant
         agent = _agent(org)
@@ -287,3 +323,29 @@ def test_end_classifies_appointment_outcome(tenant):
     assert ended.json()["outcome"] == "appointment_booked"
     conversation.refresh_from_db()
     assert conversation.outcome == ConversationOutcome.APPOINTMENT_BOOKED
+
+
+def test_transfer_then_end_preserves_transferred_outcome(tenant):
+    _, org, client = tenant
+    agent = _agent(org)
+    conversation = _conv(org, agent, status=PhoneCallStatus.IN_PROGRESS)
+
+    from ai.tools import TOOLS, execute_tool
+
+    assert "transfer_to_human" in TOOLS
+
+    result = json.loads(
+        execute_tool(
+            org, agent.id, conversation.id, "transfer_to_human",
+            json.dumps({"reason": "Customer requested a human"}),
+        )
+    )
+    assert result["success"] is True
+
+    conversation.refresh_from_db()
+    assert conversation.status == "CLOSED"
+    assert conversation.phone_call.provider_status == "TRANSFERRED"
+
+    ended = client.post(f"/calls/{conversation.id}/end")
+    assert ended.status_code == 200
+    assert ended.json()["outcome"] == "transferred_to_human"

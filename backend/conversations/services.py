@@ -4,6 +4,7 @@ import json
 
 from ai.agent import run_agent
 
+from .call_intelligence import get_customer_memory
 from .models import ConversationMessage
 
 
@@ -12,6 +13,18 @@ def build_conversation_history(conversation):
     history = conversation.messages.all().order_by("created_at", "id")
 
     conversation_messages = []
+
+    memory = get_customer_memory(conversation)
+    if memory:
+        conversation_messages.append(
+            {
+                "role": "system",
+                "content": (
+                    "Information about the customer, learned from previous calls:\n"
+                    f"{memory}"
+                ),
+            }
+        )
 
     for message in history:
         if message.role == ConversationMessage.Role.USER:
