@@ -1266,15 +1266,15 @@ Conversion rate
 
 ## Phase 3 — AI Agent
 
-* [ ] Tool framework
-* [ ] Tool schemas
-* [ ] Tool execution loop
-* [ ] Availability tool
-* [ ] Booking tool
-* [ ] Appointment validation
-* [ ] Customer lookup
-* [ ] Human transfer tool
-* [ ] Better agent memory
+* [x] Tool framework
+* [x] Tool schemas
+* [x] Tool execution loop
+* [x] Availability tool
+* [x] Booking tool
+* [x] Appointment validation
+* [x] Customer lookup
+* [x] Human transfer tool
+* [x] Better agent memory
 
 ## Phase 4 — Voice
 
@@ -1289,23 +1289,23 @@ Conversion rate
 
 ## Phase 5 — Dashboard
 
-* [ ] Frontend
-* [ ] Login
-* [ ] Agent management
-* [ ] Call history
-* [ ] Transcript viewer
-* [ ] Appointment management
-* [ ] Customer management
-* [ ] Analytics
+* [x] Frontend
+* [x] Login
+* [x] Agent management
+* [x] Call history
+* [x] Transcript viewer
+* [x] Appointment management
+* [x] Customer management
+* [x] Analytics
 
 ## Phase 6 — Knowledge
 
-* [ ] File uploads
-* [ ] Document processing
-* [ ] Embeddings
-* [ ] Vector database
-* [ ] RAG
-* [ ] Agent knowledge base
+* [x] File uploads
+* [x] Document processing
+* [x] Embeddings
+* [ ] Vector database (embedded chunk search is used; no dedicated vector store yet)
+* [x] RAG
+* [x] Agent knowledge base
 
 ## Phase 7 — Production
 
@@ -1584,49 +1584,37 @@ The final platform should look approximately like:
 # 39. Current Status Summary
 
 ```text
-Backend foundation       ████████████████████ 100%
-Authentication           ████████████████████ 100%
-Agent management         ████████████████████ 100%
-Call management          ██████████████████░░  90%
-Conversation memory      ██████████████████░░  90%
-Basic LLM                ████████████████░░░░  80%
-
-Tool calling             ████░░░░░░░░░░░░░░░░  20%
-Appointments             ████████░░░░░░░░░░░░  40%
-Voice                    ░░░░░░░░░░░░░░░░░░░░   0%
-Telephony                ░░░░░░░░░░░░░░░░░░░░   0%
-Dashboard                ░░░░░░░░░░░░░░░░░░░░   0%
-RAG                      ░░░░░░░░░░░░░░░░░░░░   0%
-Production               ░░░░░░░░░░░░░░░░░░░░   0%
+Backend foundation (Django + DRF)  ████████████████████ 100%
+Authentication                      ████████████████████ 100%
+Agent management                    ████████████████████ 100%
+Call management                     ████████████████████ 100%
+Conversation memory                 ████████████████████ 100%
+Customer memory                     ████████████████████ 100%
+Basic LLM                           ██████████████████░░  90%  (live call pending a real API key)
+Tool calling (5 tools)              ████████████████████ 100%
+Call intelligence (summary/outcome) ████████████████████ 100%
+Appointments                        ████████████████████ 100%
+Dashboard (React)                   ████████████████████ 100%
+RAG (knowledge base)                ████████████████████ 100%
+Vector database                     ░░░░░░░░░░░░░░░░░░░░   0%
+Voice / telephony                   ░░░░░░░░░░░░░░░░░░░░   0%
+Production                          ░░░░░░░░░░░░░░░░░░░░   0%
 ```
 
 ---
 
 # 40. Immediate Next Action
 
-Do NOT jump directly to telephony.
+LLM tool calling is implemented and tested (eligibility check, booking, customer
+lookup, knowledge search, human transfer plus call summary/outcome and customer
+memory). Three things remain:
 
-The next implementation is:
-
-```text
-Build LLM Tool Calling
-```
-
-Starting with:
-
-```text
-check_appointment_availability
-```
-
-Then:
-
-```text
-book_appointment
-```
-
-Then test the complete conversation through Swagger.
-
-Once this works reliably, proceed to the voice/telephony layer.
+1. Validate the live end-to-end flow with a real LLM API key
+   (the current ``LLM_API_KEY`` is a placeholder).
+2. Optionally import existing FastAPI data:
+   ``manage.py import_legacy_users`` then ``manage.py import_legacy_data``.
+3. Only then begin Phase 4 — the voice/telephony layer. Per AGENTS.md, it is
+   out of scope until explicitly requested.
 
 ````
 
