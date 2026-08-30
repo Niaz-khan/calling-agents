@@ -1278,14 +1278,20 @@ Conversion rate
 
 ## Phase 4 — Voice
 
-* [ ] Telephony provider
-* [ ] Incoming call webhook
-* [ ] Call lifecycle
-* [ ] Speech-to-text
-* [ ] Text-to-speech
-* [ ] Audio streaming
-* [ ] Real-time conversation
-* [ ] Call recording/transcription
+* [x] Telephony provider (Twilio client + TwiML + signature verification)
+* [x] Incoming call webhook (`/telephony/webhook/inbound`)
+* [x] Call lifecycle (status callback, provider status normalization)
+* [x] Speech-to-text (OpenAI-compatible; Groq whisper in staging)
+* [x] Text-to-speech (Edge neural voices free provider; OpenAI-compatible also supported)
+* [ ] Audio streaming (Twilio Media Streams websocket; Gather-based loop is live)
+* [x] Real-time conversation (TwiML speech-gather loop over the text agent)
+* [ ] Call recording/transcription (transcript is persisted; provider recording not yet saved)
+
+Staging uses a TwiML `<Gather input="speech">` conversational loop — Twilio
+collects each caller utterance and posts it to `/telephony/webhook/gather`,
+which runs the agent and answers with TwiML that speaks the reply. No
+websocket infrastructure is required. Audio streaming (Media Streams) remains
+incremental.
 
 ## Phase 5 — Dashboard
 
