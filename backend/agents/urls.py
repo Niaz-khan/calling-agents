@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .public import PublicChatView, widget_demo, widget_js
+from .public import PublicChatView, widget_config, widget_demo, widget_js
 from .views import AgentViewSet, DeploymentViewSet
 
 urlpatterns = [
@@ -31,6 +31,7 @@ urlpatterns = [
         ),
     ),
     path("public/chat/<str:identifier>", PublicChatView.as_view()),
+    path("public/config/<str:identifier>", widget_config),
     path("widget.js", widget_js),
     path("widget", widget_demo),
 ]

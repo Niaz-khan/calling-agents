@@ -71,6 +71,9 @@ class AgentDeployment(models.Model):
         max_length=64, unique=True, editable=False, default=generate_public_identifier
     )
     allowed_domains = models.JSONField(default=list, blank=True)
+    widget_title = models.CharField(max_length=255, blank=True, null=True)
+    widget_primary_color = models.CharField(max_length=20, blank=True, null=True)
+    welcome_message = models.CharField(max_length=500, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

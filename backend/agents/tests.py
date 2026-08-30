@@ -466,6 +466,138 @@ class TestPublicChat:
         )
         assert blocked.status_code == 403
 
+    def test_message_too_long_returns_400(self, tenant, api_client):
+        _, org, _ = tenant
+        deployment = self._deployment(org)
+        resp = api_client.post(
+            f"/public/chat/{deployment.public_identifier}",
+            {"message": "x" * 2001},
+            format="json",
+            HTTP_X_VISITOR_ID="v",
+        )
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "message is too long"
+
+    def test_throttling_returns_429(self, tenant, api_client, monkeypatch):
+        import agents.public as public_module
+
+        _, org, _ = tenant
+        deployment = self._deployment(org)
+        monkeypatch.setattr("agents.public.THROTTLE_LIMIT_PER_WINDOW", 3)
+        monkeypatch.setattr("agents.public.THROTTLE_WINDOW_SECONDS", 3600)
+        monkeypatch.setattr("ai.agent.generate_response", lambda messages, tools=None: {
+            "content": "ok", "tool_calls": []
+        })
+
+        url = f"/public/chat/{deployment.public_identifier}"
+        for _ in range(3):
+            assert api_client.post(
+                url, {"message": "hi"}, format="json", HTTP_X_VISITOR_ID="v-rt"
+            ).status_code == 200
+
+        limited = api_client.post(
+            url, {"message": "hi"}, format="json", HTTP_X_VISITOR_ID="v-rt"
+        )
+        assert limited.status_code == 429
+        data = limited.json()
+        assert data["detail"] == "Too many requests"
+        assert int(data["retry_after"]) >= 1
+        assert int(limited["Retry-After"]) >= 1
+
+
+class TestWidgetConfig:
+    def _deployment(self, org, **kwargs):
+        from agents.models import Agent
+
+        agent = Agent.objects.create(
+            organization=org, name="Receptionist", system_prompt="p"
+        )
+        defaults = {"channel": AgentDeployment.Channel.WEBSITE}
+        defaults.update(kwargs)
+        return AgentDeployment.objects.create(organization=org, agent=agent, **defaults)
+
+    def test_config_unknown_or_phone_returns_404(self, tenant, api_client):
+        _, org, _ = tenant
+        assert api_client.get("/public/config/pub_missing").status_code == 404
+
+        phone = self._deployment(org, channel=AgentDeployment.Channel.PHONE)
+        assert (
+            api_client.get(f"/public/config/{phone.public_identifier}").status_code == 404
+        )
+
+    def test_config_returns_branding(self, tenant, api_client):
+        _, org, _ = tenant
+        deployment = self._deployment(
+            org,
+            widget_title="Acme Support",
+            widget_primary_color="#0F766E",
+            welcome_message="Hi! Ask me about appointments.",
+            allowed_domains=["acme.com"],
+        )
+        resp = api_client.get(
+            f"/public/config/{deployment.public_identifier}",
+            HTTP_ORIGIN="https://acme.com",
+        )
+        assert resp.status_code == 200
+        assert resp["Access-Control-Allow-Origin"] == "https://acme.com"
+        data = resp.json()
+        assert data["identifier"] == deployment.public_identifier
+        assert data["agent"] == {"name": "Receptionist"}
+        assert data["title"] == "Acme Support"
+        assert data["primary_color"] == "#0F766E"
+        assert data["welcome_message"] == "Hi! Ask me about appointments."
+        assert data["online"] is True
+
+    def test_config_defaults_when_unset(self, tenant, api_client):
+        _, org, _ = tenant
+        deployment = self._deployment(org)
+        data = api_client.get(
+            f"/public/config/{deployment.public_identifier}"
+        ).json()
+        assert data["title"] == "Receptionist"
+        assert data["primary_color"] == "#4f46e5"
+        assert data["welcome_message"] == ""
+
+    def test_config_rejects_disallowed_origin(self, tenant, api_client):
+        _, org, _ = tenant
+        deployment = self._deployment(org, allowed_domains=["acme.com"])
+        blocked = api_client.get(
+            f"/public/config/{deployment.public_identifier}",
+            HTTP_ORIGIN="https://evil.com",
+        )
+        assert blocked.status_code == 403
+
+
+def test_deployment_branding_validation(tenant):
+    _, _, client = tenant
+    agent = client.post(
+        "/agents", {"name": "Branded", "system_prompt": "p"}
+    ).json()
+    created = client.post(
+        "/deployments",
+        {
+            "agent_id": agent["id"],
+            "channel": "website",
+            "widget_title": "Acme",
+            "widget_primary_color": "#0F766E",
+            "welcome_message": "Hello!",
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["widget_title"] == "Acme"
+    assert created.json()["widget_primary_color"] == "#0F766E"
+    assert created.json()["welcome_message"] == "Hello!"
+
+    bad = client.post(
+        "/deployments",
+        {
+            "agent_id": agent["id"],
+            "channel": "website",
+            "widget_primary_color": "not-a-color",
+        },
+    )
+    assert bad.status_code == 400
+
 
 def test_widget_endpoints():
     from django.test import Client as DjangoClient
@@ -476,6 +608,8 @@ def test_widget_endpoints():
     assert js["Content-Type"].startswith("application/javascript")
     assert "dataset.agent" in js.content.decode()
     assert "/public/chat/" in js.content.decode()
+    assert "/public/config/" in js.content.decode()
+    assert "--ai-primary" in js.content.decode()
 
     page = client.get("/widget")
     assert page.status_code == 200

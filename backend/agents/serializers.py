@@ -1,6 +1,10 @@
+import re
+
 from rest_framework import serializers
 
 from .models import Agent, AgentDeployment
+
+_HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{3}$|^#[0-9a-fA-F]{6}$")
 
 
 class AgentSerializer(serializers.ModelSerializer):
@@ -34,6 +38,22 @@ class AgentDeploymentSerializer(serializers.ModelSerializer):
     allowed_domains = serializers.ListField(
         child=serializers.CharField(max_length=255), required=False
     )
+    widget_title = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, max_length=255
+    )
+    widget_primary_color = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, max_length=20
+    )
+    welcome_message = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, max_length=500
+    )
+
+    def validate_widget_primary_color(self, value):
+        if value in (None, ""):
+            return value
+        if not _HEX_COLOR.fullmatch(value):
+            raise serializers.ValidationError("must be a hex color like #4f46e5")
+        return value
 
     class Meta:
         model = AgentDeployment
@@ -46,6 +66,9 @@ class AgentDeploymentSerializer(serializers.ModelSerializer):
             "enabled",
             "public_identifier",
             "allowed_domains",
+            "widget_title",
+            "widget_primary_color",
+            "welcome_message",
             "created_at",
             "updated_at",
         ]

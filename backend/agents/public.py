@@ -12,7 +12,9 @@ Domain policy:
 """
 
 import json
+import time
 
+from django.core.cache import cache
 from django.http import HttpResponse, JsonResponse
 from rest_framework import status as http_status
 from rest_framework.permissions import AllowAny
@@ -30,6 +32,11 @@ from .models import AgentDeployment
 from .widget_assets import WIDGET_HTML, WIDGET_JS
 
 _PUBLIC_CHANNELS = {ConversationChannel.WEBSITE, ConversationChannel.API}
+
+DEFAULT_WIDGET_COLOR = "#4f46e5"
+MAX_MESSAGE_CHARS = 2000
+THROTTLE_WINDOW_SECONDS = 60
+THROTTLE_LIMIT_PER_WINDOW = 60
 
 
 def _origin_host(request):
@@ -60,6 +67,27 @@ def _display_content(role, content):
     if isinstance(payload, dict) and payload.get("content"):
         return payload["content"]
     return None
+
+
+def _throttle_status(request, visitor_id) -> int:
+    """Return how many seconds until the visitor is allowed again (0 = allowed).
+
+    In-process fixed-window counter keyed by (remote IP, visitor id). Intended
+    as a lightweight abuse brake; Redis can replace it later without touching
+    views. ``X-Forwarded-For`` is intentionally ignored — it is client-supplied
+    and would make the scheme trivial to spoof.
+    """
+    ip = request.META.get("REMOTE_ADDR") or "unknown"
+    fingerprint = f"{ip}|{visitor_id or ''}"
+    now = int(time.time())
+    bucket = now // THROTTLE_WINDOW_SECONDS
+    cache_key = f"pubchat:{fingerprint}:{bucket}"
+    count = cache.get(cache_key, 0)
+    if count >= THROTTLE_LIMIT_PER_WINDOW:
+        retry = (bucket + 1) * THROTTLE_WINDOW_SECONDS - now
+        return max(retry, 1)
+    cache.set(cache_key, count + 1, timeout=THROTTLE_WINDOW_SECONDS * 2)
+    return 0
 
 
 class PublicChatView(APIView):
@@ -130,6 +158,14 @@ class PublicChatView(APIView):
                 {"detail": "X-Visitor-ID header is required"}, status=400, headers=headers
             )
 
+        retry_after = _throttle_status(request, visitor_id)
+        if retry_after:
+            return JsonResponse(
+                {"detail": "Too many requests", "retry_after": retry_after},
+                status=http_status.HTTP_429_TOO_MANY_REQUESTS,
+                headers={**headers, "Retry-After": str(retry_after)},
+            )
+
         conversation = (
             Conversation.objects.filter(
                 deployment=deployment,
@@ -182,6 +218,18 @@ class PublicChatView(APIView):
             return JsonResponse(
                 {"detail": "message is required"}, status=400, headers=headers
             )
+        if len(message.strip()) > MAX_MESSAGE_CHARS:
+            return JsonResponse(
+                {"detail": "message is too long"}, status=400, headers=headers
+            )
+
+        retry_after = _throttle_status(request, visitor_id)
+        if retry_after:
+            return JsonResponse(
+                {"detail": "Too many requests", "retry_after": retry_after},
+                status=http_status.HTTP_429_TOO_MANY_REQUESTS,
+                headers={**headers, "Retry-After": str(retry_after)},
+            )
 
         conversation = (
             Conversation.objects.filter(
@@ -222,6 +270,58 @@ class PublicChatView(APIView):
 
 def widget_js(request):
     return HttpResponse(WIDGET_JS, content_type="application/javascript; charset=utf-8")
+
+
+def widget_config(request, identifier):
+    """Public branding/preflight for a website deployment's widget.
+
+    Returns widget display config (title, primary color, welcome message) and
+    the resolved agent name. Unresolvable or non-website identifiers 404 so the
+    endpoint cannot be used to probe for deployments.
+    """
+    deployment = (
+        AgentDeployment.objects.filter(public_identifier=identifier)
+        .select_related("organization", "agent")
+        .first()
+    )
+    if (
+        deployment is None
+        or not deployment.enabled
+        or not deployment.organization.is_active
+        or not deployment.agent.is_active
+        or deployment.channel != ConversationChannel.WEBSITE
+    ):
+        return JsonResponse({"detail": "Deployment not found"}, status=404)
+
+    origin = request.headers.get("Origin")
+    host = _origin_host(request)
+    headers = {}
+    if origin and host is not None:
+        if _domain_allowed(deployment.allowed_domains, host):
+            headers["Access-Control-Allow-Origin"] = origin
+            headers["Vary"] = "Origin"
+
+    if request.method == "OPTIONS":
+        if origin and "Access-Control-Allow-Origin" not in headers:
+            return JsonResponse({"detail": "Origin not allowed"}, status=403, headers=headers)
+        headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+        headers["Access-Control-Allow-Headers"] = "Content-Type, X-Visitor-ID"
+        return HttpResponse(status=200, headers=headers)
+
+    if origin and "Access-Control-Allow-Origin" not in headers:
+        return JsonResponse({"detail": "Origin not allowed"}, status=403, headers=headers)
+
+    return JsonResponse(
+        {
+            "identifier": deployment.public_identifier,
+            "agent": {"name": deployment.agent.name},
+            "title": deployment.widget_title or deployment.agent.name or "Chat with us",
+            "primary_color": deployment.widget_primary_color or DEFAULT_WIDGET_COLOR,
+            "welcome_message": deployment.welcome_message or "",
+            "online": True,
+        },
+        headers=headers,
+    )
 
 
 def widget_demo(request):
