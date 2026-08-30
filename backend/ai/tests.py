@@ -578,6 +578,29 @@ class TestTransferToHumanTool:
         assert conversation.ended_at is not None
         assert conversation.phone_call.provider_status == PhoneCallStatus.TRANSFERRED
 
+    def test_transfer_authorization_refused(self, org_agent):
+        org, agent = org_agent
+        agent.can_transfer = False
+        agent.save(update_fields=["can_transfer"])
+        conversation = _conversation(org, agent)
+
+        result = json.loads(
+            execute_tool(
+                org, agent.id, conversation.id, "transfer_to_human",
+                json.dumps({"reason": "Customer requested a manager"}),
+            )
+        )
+        assert result["success"] is False
+        assert "error" in result
+        assert "disabled" in result["error"]
+
+        conversation.refresh_from_db()
+        assert conversation.status == ConversationStatus.OPEN
+        assert (
+            conversation.phone_call.provider_status
+            == PhoneCallStatus.IN_PROGRESS
+        )
+
     def test_succeeds_without_call(self, org_agent):
         org, agent = org_agent
         result = json.loads(

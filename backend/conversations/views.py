@@ -2,6 +2,7 @@ from rest_framework import serializers, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from agents.models import Agent
 from ai.provider import LLMError
@@ -13,6 +14,9 @@ from conversations.models import (
     PhoneCallStatus,
 )
 from crm.models import Customer
+from telephony.models import PhoneNumber
+from telephony.services import ProviderCallError, place_outbound_call
+from tenancy.access import get_request_organization
 from tenancy.drf import OrganizationModelViewSet
 
 from .call_intelligence import classify_call_outcome, finalize_call
@@ -34,6 +38,57 @@ class CallCreateSerializer(serializers.Serializer):
 
 class MessageCreateSerializer(serializers.Serializer):
     message = serializers.CharField(min_length=1, max_length=5000)
+
+
+class OutboundCallSerializer(serializers.Serializer):
+    agent_id = serializers.IntegerField()
+    from_number_id = serializers.IntegerField()
+    to = serializers.CharField(min_length=1, max_length=50)
+
+
+class OutboundCallView(APIView):
+    """Place a real outbound phone call through the configured provider."""
+
+    def post(self, request):
+        organization = get_request_organization(request)
+        if organization is None:
+            raise NotFound("Organization not found")
+
+        serializer = OutboundCallSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        agent = Agent.objects.filter(
+            id=data["agent_id"], organization=organization, is_active=True
+        ).first()
+        if agent is None:
+            raise NotFound("Agent not found")
+
+        from_number = PhoneNumber.objects.filter(
+            id=data["from_number_id"], organization=organization, is_active=True
+        ).first()
+        if from_number is None:
+            raise NotFound("Phone number not found")
+
+        if not from_number.outbound_enabled:
+            return Response(
+                {"detail": "This phone number does not allow outbound calls"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            conversation = place_outbound_call(
+                organization, agent, from_number, data["to"]
+            )
+        except ProviderCallError as exc:
+            return Response(
+                {"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY
+            )
+
+        return Response(
+            CallDetailSerializer(conversation, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class CallViewSet(OrganizationModelViewSet):

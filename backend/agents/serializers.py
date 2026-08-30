@@ -14,6 +14,15 @@ class AgentSerializer(serializers.ModelSerializer):
         required=False, allow_blank=True, allow_null=True
     )
     system_prompt = serializers.CharField(min_length=1)
+    voice_greeting = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, max_length=500
+    )
+    after_hours_behavior = serializers.ChoiceField(
+        choices=Agent.AfterHoursBehavior.choices, required=False
+    )
+    max_call_duration_minutes = serializers.IntegerField(
+        required=False, allow_null=True, min_value=1, max_value=1440
+    )
 
     class Meta:
         model = Agent
@@ -24,6 +33,11 @@ class AgentSerializer(serializers.ModelSerializer):
             "description",
             "system_prompt",
             "is_active",
+            "voice_greeting",
+            "after_hours_behavior",
+            "recording_enabled",
+            "max_call_duration_minutes",
+            "can_transfer",
             "created_at",
             "updated_at",
         ]

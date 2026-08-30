@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import time
+from datetime import timedelta
 from types import SimpleNamespace
 
 import httpx
@@ -636,3 +637,666 @@ def test_telephony_provider_factory_telnyx():
             pass
         else:
             raise AssertionError("expected ValueError for missing Telnyx API key")
+
+
+# ---------------------------------------------------------------------------
+# Phase 10: extended phone configuration, outbound calls, and call quality
+# ---------------------------------------------------------------------------
+
+
+def test_phone_number_extended_fields(tenant):
+    _, org, client = tenant
+    agent = _make_agent(org)
+
+    created = client.post(
+        "/phone-numbers",
+        {
+            "phone_number": "+13331114444",
+            "agent_id": agent.id,
+            "provider": "telnyx",
+            "provider_number_id": "TX123",
+            "country": "US",
+            "capabilities": ["voice", "sms"],
+            "inbound_enabled": True,
+            "outbound_enabled": False,
+        },
+    )
+    assert created.status_code == 201
+    data = created.json()
+    assert data["provider"] == "telnyx"
+    assert data["country"] == "US"
+    assert data["capabilities"] == ["voice", "sms"]
+    assert data["inbound_enabled"] is True
+    assert data["outbound_enabled"] is False
+
+    toggled = client.patch(
+        f"/phone-numbers/{data['id']}", {"outbound_enabled": True}
+    )
+    assert toggled.status_code == 200
+    assert toggled.json()["outbound_enabled"] is True
+
+
+def test_phone_number_provider_must_be_valid(tenant):
+    _, org, client = tenant
+    agent = _make_agent(org)
+    resp = client.post(
+        "/phone-numbers",
+        {"phone_number": "+13332221111", "agent_id": agent.id, "provider": "pstn"},
+    )
+    assert resp.status_code == 400
+    assert "provider" in resp.json()
+
+
+def test_inbound_webhook_after_hours_messages_and_ends(tenant, api_client, monkeypatch):
+    _, org, _ = tenant
+    agent = _make_agent(org)
+    _make_number(org, agent)
+
+    monkeypatch.setattr("telephony.webhooks.is_business_open", lambda org: False)
+
+    params = {"To": "+14441110000", "From": "+15550001111", "CallSid": "CACLOSED"}
+    sig = _sign("http://testserver/telephony/webhook/inbound", params, TOKEN)
+
+    with override_settings(TWILIO_AUTH_TOKEN=TOKEN):
+        resp = api_client.post(
+            "/telephony/webhook/inbound",
+            params,
+            format="multipart",
+            HTTP_X_TWILIO_SIGNATURE=sig,
+        )
+
+    assert resp.status_code == 200
+    assert b"We're currently closed" in resp.content
+    assert b"<Say" in resp.content
+    assert b"<Gather" not in resp.content
+
+    conversation = Conversation.objects.get()
+    call = conversation.phone_call
+    assert call.provider_call_id == "CACLOSED"
+    assert call.direction == "INBOUND"
+    assert conversation.customer.phone_number == "+15550001111"
+
+
+def test_inbound_webhook_after_hours_continue_engages(tenant, api_client, monkeypatch):
+    _, org, _ = tenant
+    agent = _make_agent(org)
+    agent.after_hours_behavior = "continue"
+    agent.save(update_fields=["after_hours_behavior"])
+    _make_number(org, agent)
+
+    monkeypatch.setattr("telephony.webhooks.is_business_open", lambda org: False)
+
+    params = {"To": "+14441110000", "From": "+15550001111", "CallSid": "CAOPEN24"}
+    sig = _sign("http://testserver/telephony/webhook/inbound", params, TOKEN)
+
+    with override_settings(TWILIO_AUTH_TOKEN=TOKEN):
+        resp = api_client.post(
+            "/telephony/webhook/inbound",
+            params,
+            format="multipart",
+            HTTP_X_TWILIO_SIGNATURE=sig,
+        )
+
+    assert resp.status_code == 200
+    assert b'<Gather input="speech"' in resp.content
+
+
+def test_inbound_webhook_uses_agent_greeting(tenant, api_client):
+    from conversations.models import Conversation as C
+
+    _, org, _ = tenant
+    agent = _make_agent(org)
+    agent.voice_greeting = "Welcome to Sparkle Dental. How can I help?"
+    agent.save(update_fields=["voice_greeting"])
+    _make_number(org, agent)
+
+    params = {"To": "+14441110000", "From": "+15550001111", "CallSid": "CAGREET"}
+    sig = _sign("http://testserver/telephony/webhook/inbound", params, TOKEN)
+
+    with override_settings(TWILIO_AUTH_TOKEN=TOKEN):
+        resp = api_client.post(
+            "/telephony/webhook/inbound",
+            params,
+            format="multipart",
+            HTTP_X_TWILIO_SIGNATURE=sig,
+        )
+
+    assert resp.status_code == 200
+    assert b"Welcome to Sparkle Dental" in resp.content
+    assert C.objects.filter(phone_call__provider_call_id="CAGREET").exists()
+
+
+def test_gather_webhook_enforces_max_duration(tenant, api_client):
+    from django.utils import timezone
+
+    _, org, _ = tenant
+    agent = _make_agent(org)
+    agent.max_call_duration_minutes = 1
+    agent.save(update_fields=["max_call_duration_minutes"])
+    conversation = _make_conversation(org, agent)
+    conversation.started_at = timezone.now() - timedelta(minutes=10)
+    conversation.save(update_fields=["started_at"])
+
+    params = {"CallSid": "CA123", "SpeechResult": "hello"}
+    sig = _sign("http://testserver/telephony/webhook/gather", params, TOKEN)
+
+    with override_settings(TWILIO_AUTH_TOKEN=TOKEN):
+        resp = api_client.post(
+            "/telephony/webhook/gather",
+            params,
+            format="multipart",
+            HTTP_X_TWILIO_SIGNATURE=sig,
+        )
+
+    assert resp.status_code == 200
+    assert b"<Response></Response>" in resp.content
+    conversation.refresh_from_db()
+    assert conversation.status == "CLOSED"
+
+
+def test_status_webhook_persists_recording_when_enabled(tenant, api_client, monkeypatch):
+    from conversations.models import PhoneCall as PC
+
+    _noop_finalize(monkeypatch)
+
+    _, org, _ = tenant
+    agent = _make_agent(org)
+    agent.recording_enabled = True
+    agent.save(update_fields=["recording_enabled"])
+    conversation = _make_conversation(org, agent)
+
+    params = {
+        "CallSid": "CA123",
+        "CallStatus": "completed",
+        "RecordingUrl": "https://api.twilio.com/rec/RE123.mp3",
+        "RecordingSid": "RE123",
+    }
+    sig = _sign("http://testserver/telephony/webhook/status", params, TOKEN)
+
+    with override_settings(TWILIO_AUTH_TOKEN=TOKEN):
+        resp = api_client.post(
+            "/telephony/webhook/status",
+            params,
+            format="multipart",
+            HTTP_X_TWILIO_SIGNATURE=sig,
+        )
+
+    assert resp.status_code == 200
+    call = PC.objects.get(conversation=conversation)
+    assert call.recording_url == "https://api.twilio.com/rec/RE123.mp3"
+
+
+def test_status_webhook_ignores_recording_when_disabled(tenant, api_client, monkeypatch):
+    from conversations.models import PhoneCall as PC
+
+    _noop_finalize(monkeypatch)
+
+    _, org, _ = tenant
+    agent = _make_agent(org)
+    conversation = _make_conversation(org, agent)
+
+    params = {
+        "CallSid": "CA123",
+        "CallStatus": "completed",
+        "RecordingUrl": "https://api.twilio.com/rec/RE456.mp3",
+    }
+    sig = _sign("http://testserver/telephony/webhook/status", params, TOKEN)
+
+    with override_settings(TWILIO_AUTH_TOKEN=TOKEN):
+        resp = api_client.post(
+            "/telephony/webhook/status",
+            params,
+            format="multipart",
+            HTTP_X_TWILIO_SIGNATURE=sig,
+        )
+
+    assert resp.status_code == 200
+    assert PC.objects.get(conversation=conversation).recording_url is None
+
+
+def test_outbound_webhook_answers_with_gather(tenant, api_client):
+    _, org, _ = tenant
+    agent = _make_agent(org)
+    conversation = _make_conversation(org, agent, call_sid="CAOUT1")
+
+    params = {"CallSid": "CAOUT1", "To": "+15550001111", "From": "+14441110000"}
+    sig = _sign("http://testserver/telephony/webhook/outbound", params, TOKEN)
+
+    with override_settings(TWILIO_AUTH_TOKEN=TOKEN):
+        resp = api_client.post(
+            "/telephony/webhook/outbound",
+            params,
+            format="multipart",
+            HTTP_X_TWILIO_SIGNATURE=sig,
+        )
+
+    assert resp.status_code == 200
+    assert b'<Gather input="speech"' in resp.content
+    conversation.refresh_from_db()
+    assert conversation.phone_call.direction == "INBOUND"
+
+
+def test_outbound_webhook_unknown_call_hangs_up(api_client):
+    params = {"CallSid": "CA_NOPE", "To": "+15550001111"}
+    sig = _sign("http://testserver/telephony/webhook/outbound", params, TOKEN)
+
+    with override_settings(TWILIO_AUTH_TOKEN=TOKEN):
+        resp = api_client.post(
+            "/telephony/webhook/outbound",
+            params,
+            format="multipart",
+            HTTP_X_TWILIO_SIGNATURE=sig,
+        )
+
+    assert resp.status_code == 200
+    assert b"<Response></Response>" in resp.content
+
+
+def test_gather_webhook_transfer_returns_dial(tenant, api_client, monkeypatch):
+    _, org, _ = tenant
+    org.transfer_phone_number = "+15550007777"
+    org.save(update_fields=["transfer_phone_number"])
+    agent = _make_agent(org)
+    conversation = _make_conversation(org, agent)
+
+    def fake_turn(conversation, agent, text):
+        conversation.close()
+        conversation.save(update_fields=["status", "ended_at"])
+        conversation.phone_call.provider_status = PhoneCallStatus.TRANSFERRED
+        conversation.phone_call.save(update_fields=["provider_status"])
+        return SimpleNamespace(response="Transferring you now.")
+
+    monkeypatch.setattr("telephony.webhooks.run_agent_turn", fake_turn)
+
+    params = {"CallSid": "CA123", "SpeechResult": "human please"}
+    sig = _sign("http://testserver/telephony/webhook/gather", params, TOKEN)
+
+    with override_settings(TWILIO_AUTH_TOKEN=TOKEN):
+        resp = api_client.post(
+            "/telephony/webhook/gather",
+            params,
+            format="multipart",
+            HTTP_X_TWILIO_SIGNATURE=sig,
+        )
+
+    assert resp.status_code == 200
+    assert b"<Dial>+15550007777</Dial>" in resp.content
+
+
+def test_gather_webhook_transfer_without_destination_hangs_up(tenant, api_client, monkeypatch):
+    _, org, _ = tenant
+    agent = _make_agent(org)
+    conversation = _make_conversation(org, agent)
+
+    def fake_turn(conversation, agent, text):
+        conversation.close()
+        conversation.save(update_fields=["status", "ended_at"])
+        conversation.phone_call.provider_status = PhoneCallStatus.TRANSFERRED
+        conversation.phone_call.save(update_fields=["provider_status"])
+        return SimpleNamespace(response="Transferring you now.")
+
+    monkeypatch.setattr("telephony.webhooks.run_agent_turn", fake_turn)
+
+    params = {"CallSid": "CA123", "SpeechResult": "human please"}
+    sig = _sign("http://testserver/telephony/webhook/gather", params, TOKEN)
+
+    with override_settings(TWILIO_AUTH_TOKEN=TOKEN):
+        resp = api_client.post(
+            "/telephony/webhook/gather",
+            params,
+            format="multipart",
+            HTTP_X_TWILIO_SIGNATURE=sig,
+        )
+
+    assert resp.status_code == 200
+    assert b"<Response></Response>" in resp.content
+
+
+def _monkeypatch_finalize(monkeypatch):
+    monkeypatch.setattr("telephony.services.finalize_call", lambda c: c)
+
+
+def test_place_outbound_call_success(tenant, monkeypatch):
+    from .services import place_outbound_call
+
+    _, org, _ = tenant
+    agent = _make_agent(org)
+    number = _make_number(org, agent, phone="+15125550000")
+
+    provider = _FakeProvider(call_id="SID_OUT")
+
+    conversation = place_outbound_call(
+        org, agent, number, "+15550001111", provider=provider
+    )
+    conversation.refresh_from_db()
+    call = conversation.phone_call
+
+    assert conversation.channel == "phone"
+    assert call.direction == "OUTBOUND"
+    assert call.caller_number == "+15550001111"
+    assert call.provider_status == PhoneCallStatus.RINGING
+    assert call.provider_call_id == "SID_OUT"
+    assert conversation.customer.phone_number == "+15550001111"
+
+    assert provider.calls == [
+        (
+            "+15125550000",
+            "+15550001111",
+            "http://localhost:8000/telephony/webhook/outbound",
+            "http://localhost:8000/telephony/webhook/status",
+        )
+    ]
+
+
+def test_place_outbound_call_failure_marks_failed(tenant, monkeypatch):
+    from .services import ProviderCallError, place_outbound_call
+
+    _, org, _ = tenant
+    agent = _make_agent(org)
+    number = _make_number(org, agent)
+
+    provider = _FakeProvider(error=RuntimeError("provider down"))
+
+    with pytest.raises(ProviderCallError):
+        place_outbound_call(org, agent, number, "+15550001111", provider=provider)
+
+    conversation = Conversation.objects.get()
+    conversation.refresh_from_db()
+    assert conversation.status == "CLOSED"
+    assert conversation.phone_call.provider_status == PhoneCallStatus.FAILED
+    assert conversation.phone_call.provider_call_id is None
+
+
+def test_place_outbound_call_requires_outbound_capability(tenant):
+    from .services import ProviderCallError, place_outbound_call
+
+    _, org, _ = tenant
+    agent = _make_agent(org)
+    number = _make_number(org, agent)
+    number.outbound_enabled = False
+    number.save(update_fields=["outbound_enabled"])
+
+    with pytest.raises(ProviderCallError):
+        place_outbound_call(org, agent, number, "+15550001111", provider=_FakeProvider())
+
+
+def test_outbound_call_endpoint_places_call(tenant, monkeypatch):
+    _, org, client = tenant
+    agent = _make_agent(org)
+    number = client.post(
+        "/phone-numbers", {"phone_number": "+15125550000", "agent_id": agent.id}
+    ).json()
+
+    captured = {}
+
+    def fake_place(organization, agent, from_number, to):
+        captured["args"] = (organization.id, agent.id, from_number.id, to)
+        conversation = _make_conversation(organization, agent, call_sid=None)
+        conversation.phone_call.direction = "OUTBOUND"
+        conversation.phone_call.caller_number = to
+        conversation.phone_call.save()
+        return conversation
+
+    monkeypatch.setattr("conversations.views.place_outbound_call", fake_place)
+
+    resp = client.post(
+        "/calls/outbound",
+        {"agent_id": agent.id, "from_number_id": number["id"], "to": "+15550001111"},
+    )
+
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["direction"] == "outbound"
+    assert data["caller_number"] == "+15550001111"
+    assert captured["args"] == (org.id, agent.id, number["id"], "+15550001111")
+
+
+def test_outbound_call_endpoint_validations(tenant, monkeypatch):
+    _, org, client = tenant
+    agent = _make_agent(org)
+    number = client.post(
+        "/phone-numbers", {"phone_number": "+15125551111", "agent_id": agent.id}
+    ).json()
+
+    monkeypatch.setattr("conversations.views.place_outbound_call", lambda *a, **k: None)
+
+    assert (
+        client.post(
+            "/calls/outbound",
+            {"agent_id": 9999, "from_number_id": number["id"], "to": "+15550001111"},
+        ).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            "/calls/outbound",
+            {"agent_id": agent.id, "from_number_id": 9999, "to": "+15550001111"},
+        ).status_code
+        == 404
+    )
+
+    disabled = client.patch(
+        f"/phone-numbers/{number['id']}", {"outbound_enabled": False}
+    ).json()
+    assert (
+        client.post(
+            "/calls/outbound",
+            {"agent_id": agent.id, "from_number_id": disabled["id"], "to": "+15550001111"},
+        ).status_code
+        == 400
+    )
+
+
+def test_outbound_call_endpoint_provider_failure_502(tenant, monkeypatch):
+    from conversations.views import ProviderCallError
+
+    _, org, client = tenant
+    agent = _make_agent(org)
+    number = client.post(
+        "/phone-numbers", {"phone_number": "+15125552222", "agent_id": agent.id}
+    ).json()
+
+    def boom(*args, **kwargs):
+        raise ProviderCallError("Provider could not place the outbound call")
+
+    monkeypatch.setattr("conversations.views.place_outbound_call", boom)
+
+    resp = client.post(
+        "/calls/outbound",
+        {"agent_id": agent.id, "from_number_id": number["id"], "to": "+15550001111"},
+    )
+    assert resp.status_code == 502
+
+
+def test_outbound_call_endpoint_requires_auth(api_client):
+    assert (
+        api_client.post(
+            "/calls/outbound", {"agent_id": 1, "from_number_id": 1, "to": "+1"}
+        ).status_code
+        == 401
+    )
+
+
+class _FakeProvider:
+    def __init__(self, call_id="CC1", error=None, connected=True):
+        self.call_id = call_id
+        self.error = error
+        self.connected = connected
+        self.calls = []
+
+    async def create_call(self, from_number, to_number, webhook_url=None, status_callback_url=None):
+        self.calls.append((from_number, to_number, webhook_url, status_callback_url))
+        if self.error:
+            raise self.error
+        return self.call_id
+
+    async def verify_credentials(self):
+        return self.connected
+
+
+def _noop_finalize(monkeypatch):
+    monkeypatch.setattr("telephony.services.finalize_call", lambda c: c)
+
+
+def test_telnyx_webhook_rejects_bad_signature(api_client):
+    resp = api_client.post(
+        "/telephony/webhook/telnyx",
+        data=json.dumps({"data": {"event_type": "call.initiated"}}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 403
+
+
+def test_telnyx_webhook_inbound_creates_call(tenant, api_client, monkeypatch):
+    _, org, _ = tenant
+    agent = _make_agent(org)
+    _make_number(org, agent)
+
+    _noop_finalize(monkeypatch)
+    answered = []
+    monkeypatch.setattr("telephony.webhooks._answer_telnyx", lambda c: answered.append(c))
+
+    payload = {
+        "data": {
+            "event_type": "call.initiated",
+            "id": "v3:leg-control-1",
+            "payload": {
+                "call_control_id": "v3:leg-control-1",
+                "direction": "inbound",
+                "from": "+15550002222",
+                "to": "+14441110000",
+            },
+        }
+    }
+    signed = _telnyx_post(api_client, payload)
+    assert signed.status_code == 200
+    assert answered == ["v3:leg-control-1"]
+
+    conversation = Conversation.objects.get()
+    assert conversation.phone_call.provider_call_id == "v3:leg-control-1"
+    assert conversation.phone_call.direction == "INBOUND"
+    assert conversation.customer.phone_number == "+15550002222"
+
+    answered_payload = {
+        "data": {
+            "event_type": "call.answered",
+            "id": "v3:leg-control-1",
+            "payload": {"call_control_id": "v3:leg-control-1", "direction": "inbound"},
+        }
+    }
+    assert _telnyx_post(api_client, answered_payload).status_code == 200
+    conversation.phone_call.refresh_from_db()
+    assert conversation.phone_call.provider_status == PhoneCallStatus.IN_PROGRESS
+
+    hangup_payload = {
+        "data": {
+            "event_type": "call.hangup",
+            "id": "v3:leg-control-1",
+            "payload": {"call_control_id": "v3:leg-control-1", "direction": "inbound"},
+        }
+    }
+    assert _telnyx_post(api_client, hangup_payload).status_code == 200
+    conversation.refresh_from_db()
+    conversation.phone_call.refresh_from_db()
+    assert conversation.status == "CLOSED"
+    assert conversation.phone_call.provider_status == PhoneCallStatus.COMPLETED
+
+
+def test_telnyx_webhook_ignores_unknown_number(api_client):
+    payload = {
+        "data": {
+            "event_type": "call.initiated",
+            "id": "cc-unknown",
+            "payload": {
+                "call_control_id": "cc-unknown",
+                "direction": "inbound",
+                "from": "+15550002222",
+                "to": "+19998887777",
+            },
+        }
+    }
+    signed = _telnyx_post(api_client, payload)
+    assert signed.status_code == 200
+    assert Conversation.objects.count() == 0
+
+
+def test_telnyx_webhook_rejects_stale_timestamp(api_client):
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    private_key = Ed25519PrivateKey.generate()
+    public_key = base64.b64encode(
+        private_key.public_key().public_bytes(
+            serialization.Encoding.Raw,
+            serialization.PublicFormat.Raw,
+        )
+    ).decode()
+
+    body = json.dumps({"data": {"event_type": "call.hangup"}}).encode()
+    stale = str(int(time.time()) - 3600)
+    signature = base64.b64encode(
+        private_key.sign(f"{stale}|".encode() + body)
+    ).decode()
+
+    with override_settings(TELNYX_PUBLIC_KEY=public_key):
+        resp = api_client.post(
+            "/telephony/webhook/telnyx",
+            data=body,
+            content_type="application/json",
+            HTTP_TELNYX_TIMESTAMP=stale,
+            HTTP_TELNYX_SIGNATURE=signature,
+        )
+
+    assert resp.status_code == 403
+
+
+def test_telephony_status_endpoint(tenant, monkeypatch):
+    _, org, client = tenant
+
+    monkeypatch.setattr(
+        "telephony.providers.factory.get_telephony_provider", lambda: _FakeProvider(connected=True)
+    )
+    with override_settings(
+        TELEPHONY_PROVIDER="twilio", TWILIO_ACCOUNT_SID="sid", TWILIO_AUTH_TOKEN="tok"
+    ):
+        data = client.get("/telephony/status").json()
+
+    assert data["provider"] == "twilio"
+    assert data["configured"] is True
+    assert data["connected"] is True
+
+    with override_settings(
+        TELEPHONY_PROVIDER="twilio", TWILIO_ACCOUNT_SID="", TWILIO_AUTH_TOKEN=""
+    ):
+        data = client.get("/telephony/status").json()
+
+    assert data["configured"] is False
+    assert data["connected"] is False
+
+
+def _telnyx_post(api_client, payload):
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    private_key = Ed25519PrivateKey.generate()
+    public_key = base64.b64encode(
+        private_key.public_key().public_bytes(
+            serialization.Encoding.Raw,
+            serialization.PublicFormat.Raw,
+        )
+    ).decode()
+
+    body = json.dumps(payload).encode()
+    timestamp = str(int(time.time()))
+    signature = base64.b64encode(
+        private_key.sign(f"{timestamp}|".encode() + body)
+    ).decode()
+
+    with override_settings(TELNYX_PUBLIC_KEY=public_key):
+        return api_client.post(
+            "/telephony/webhook/telnyx",
+            data=body,
+            content_type="application/json",
+            HTTP_TELNYX_TIMESTAMP=timestamp,
+            HTTP_TELNYX_SIGNATURE=signature,
+        )

@@ -101,6 +101,18 @@ class TwilioProvider:
             status=data.get("Status", ""),
         )
 
+    async def verify_credentials(self) -> bool:
+        """Confirm the configured account can be reached."""
+        try:
+            response = await self._client().get(
+                f"{self._base_url}/Accounts/{self._account_sid}.json",
+                auth=(self._account_sid, self._auth_token),
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            return False
+        return response.status_code == 200
+
     def _client(self) -> httpx.AsyncClient:
         if self._http_client is None:
             self._http_client = httpx.AsyncClient()
@@ -147,6 +159,16 @@ def build_hangup_twiml() -> str:
     return '<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
 
 
+def build_say_twiml(message: str, language: str = "en-US") -> str:
+    """TwiML that speaks a line of text and then lets the call end."""
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<Response><Say voice="alice" language="' + escape(language) + '">'
+        + escape(message)
+        + "</Say></Response>"
+    )
+
+
 def build_gather_twiml(
     say: str,
     gather_url: str,
@@ -155,12 +177,21 @@ def build_gather_twiml(
     speech_timeout: str = "auto",
     language: str = "en-US",
 ) -> str:
-    """TwiML that speaks a line of text and then gathers the caller's speech."""
+    """TwiML that speaks a line of text and then gathers the caller's speech.
+
+    ``trim``, ``speechModel``, ``enhanced`` and ``actionOnEmptyResult`` tune
+    recognition quality for phone audio and force a POST even when the caller
+    says nothing, so the loop can re-prompt instead of silently hanging.
+    """
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
         '<Response><Say voice="alice" language="' + escape(language) + '">'
         + escape(say)
         + '</Say><Gather input="speech" speechTimeout="' + escape(speech_timeout)
+        + '" trim="trim-silence"'
+        + ' speechModel="phone_call"'
+        + ' enhanced="true"'
+        + ' actionOnEmptyResult="true"'
         + '" timeout="' + str(timeout)
         + '" action="' + escape(gather_url)
         + '" method="POST"/></Response>'

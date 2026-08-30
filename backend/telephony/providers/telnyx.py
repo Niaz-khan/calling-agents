@@ -105,12 +105,14 @@ class TelnyxProvider:
         from_number: str,
         to_number: str,
         webhook_url: str | None = None,
+        status_callback_url: str | None = None,
     ) -> str:
         """Place an outbound call, returning the call control id.
 
         Telnyx routes call events through the Voice API Application's webhook
-        configuration, so ``webhook_url`` is intentionally not part of the
-        request payload.
+        configuration, so ``webhook_url``/``status_callback_url`` are accepted
+        for protocol compatibility but intentionally not part of the request
+        payload.
         """
         if not self._connection_id:
             raise ValueError("Telnyx connection_id is not configured")
@@ -134,6 +136,16 @@ class TelnyxProvider:
     async def end_call(self, provider_call_id: str) -> None:
         response = await self._client().post(
             f"{self._calls_url(provider_call_id)}/actions/hangup",
+            headers={"Authorization": f"Bearer {self._api_key}", **_HEADERS},
+            json={},
+        )
+
+        response.raise_for_status()
+
+    async def answer_call(self, provider_call_id: str) -> None:
+        """Answer an inbound call leg so the caller is connected."""
+        response = await self._client().post(
+            f"{self._calls_url(provider_call_id)}/actions/answer",
             headers={"Authorization": f"Bearer {self._api_key}", **_HEADERS},
             json={},
         )
@@ -167,6 +179,18 @@ class TelnyxProvider:
             started_at=data.get("start_time"),
             metadata=data,
         )
+
+    async def verify_credentials(self) -> bool:
+        """Confirm the configured API key can reach the Telnyx API."""
+        try:
+            response = await self._client().get(
+                f"{self._base_url}/balance",
+                headers={"Authorization": f"Bearer {self._api_key}", **_HEADERS},
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            return False
+        return response.status_code == 200
 
     def _client(self) -> httpx.AsyncClient:
         if self._http_client is None:

@@ -18,6 +18,9 @@ class BusinessConfigSerializer(serializers.Serializer):
     contact_phone = serializers.CharField(
         required=False, allow_null=True, allow_blank=True, max_length=50
     )
+    transfer_phone_number = serializers.CharField(
+        required=False, allow_null=True, allow_blank=True, max_length=50
+    )
     address = serializers.CharField(
         required=False, allow_null=True, allow_blank=True
     )
@@ -55,6 +58,7 @@ class BusinessConfigSerializer(serializers.Serializer):
         data["timezone"] = instance.timezone or "UTC"
         data["business_hours"] = instance.business_hours or {}
         data["contact_phone"] = instance.contact_phone or None
+        data["transfer_phone_number"] = instance.transfer_phone_number or None
         data["address"] = instance.address or None
         data["website_url"] = instance.website_url or None
         return data

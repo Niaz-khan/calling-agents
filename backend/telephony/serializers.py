@@ -12,9 +12,18 @@ class PhoneNumberSerializer(serializers.ModelSerializer):
     organization_id = serializers.IntegerField(read_only=True)
     agent_id = serializers.IntegerField()
     phone_number = serializers.CharField(min_length=1, max_length=50)
-    provider = serializers.CharField(min_length=1, max_length=50, default="twilio")
+    provider = serializers.ChoiceField(
+        choices=PhoneNumber.Provider.choices, default=PhoneNumber.Provider.TWILIO
+    )
     provider_number_id = serializers.CharField(
         required=False, allow_blank=True, allow_null=True, max_length=100
+    )
+    country = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, max_length=10
+    )
+    capabilities = serializers.ListField(
+        child=serializers.ChoiceField(choices=PhoneNumber.Capability.choices),
+        required=False,
     )
 
     class Meta:
@@ -26,6 +35,10 @@ class PhoneNumberSerializer(serializers.ModelSerializer):
             "phone_number",
             "provider",
             "provider_number_id",
+            "country",
+            "capabilities",
+            "inbound_enabled",
+            "outbound_enabled",
             "is_active",
             "created_at",
         ]

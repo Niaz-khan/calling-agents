@@ -13,6 +13,10 @@ def generate_public_identifier() -> str:
 
 
 class Agent(models.Model):
+    class AfterHoursBehavior(models.TextChoices):
+        CONTINUE = "continue", "Continue with AI"
+        MESSAGE = "message", "Message and end call"
+
     organization = models.ForeignKey(
         "tenancy.Organization", on_delete=models.CASCADE, related_name="agents"
     )
@@ -20,6 +24,17 @@ class Agent(models.Model):
     description = models.TextField(blank=True, null=True)
     system_prompt = models.TextField()
     is_active = models.BooleanField(default=True)
+
+    voice_greeting = models.CharField(max_length=500, blank=True, null=True)
+    after_hours_behavior = models.CharField(
+        max_length=24,
+        choices=AfterHoursBehavior.choices,
+        default=AfterHoursBehavior.MESSAGE,
+    )
+    recording_enabled = models.BooleanField(default=False)
+    max_call_duration_minutes = models.PositiveIntegerField(blank=True, null=True)
+    can_transfer = models.BooleanField(default=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

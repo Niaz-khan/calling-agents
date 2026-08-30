@@ -38,12 +38,17 @@ class TelephonyProvider(Protocol):
         from_number: str,
         to_number: str,
         webhook_url: str | None = None,
+        status_callback_url: str | None = None,
     ) -> str:
         """Place an outbound call, returning the provider call id."""
         ...
 
     async def end_call(self, provider_call_id: str) -> None:
         """Hang up an active call."""
+        ...
+
+    async def answer_call(self, provider_call_id: str) -> None:
+        """Answer an inbound call leg so the caller is connected."""
         ...
 
     async def transfer_call(
@@ -56,4 +61,8 @@ class TelephonyProvider(Protocol):
 
     async def get_call(self, provider_call_id: str) -> TelephonyCall:
         """Retrieve the current state of a call from the provider."""
+        ...
+
+    async def verify_credentials(self) -> bool:
+        """Confirm the configured provider credentials are valid."""
         ...

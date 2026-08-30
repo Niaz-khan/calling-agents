@@ -19,6 +19,7 @@ class Organization(models.Model):
         ),
     )
     contact_phone = models.CharField(max_length=50, blank=True, null=True)
+    transfer_phone_number = models.CharField(max_length=50, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
     website_url = models.URLField(max_length=500, blank=True, null=True)
 

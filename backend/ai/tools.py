@@ -315,6 +315,11 @@ def transfer_to_human(organization, call_id, reason):
             organization=organization, id=call_id
         ).first()
         if conversation is not None:
+            if conversation.agent is not None and not conversation.agent.can_transfer:
+                return {
+                    "success": False,
+                    "error": "Transfers are disabled for this agent",
+                }
             conversation.close()
             conversation.save(update_fields=["status", "ended_at"])
             phone_call = getattr(conversation, "phone_call", None)

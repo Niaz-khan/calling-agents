@@ -59,6 +59,36 @@ def test_agent_org_isolation(tenant, stranger):
     assert all(item["id"] != created["id"] for item in other.get("/agents").json())
 
 
+def test_agent_phone_config_roundtrip(tenant):
+    _, org, client = tenant
+    created = client.post(
+        "/agents",
+        {
+            "name": "Phone Agent",
+            "system_prompt": "You are a phone receptionist.",
+            "voice_greeting": "Welcome to Blossom Florists.",
+            "after_hours_behavior": "continue",
+            "recording_enabled": True,
+            "max_call_duration_minutes": 20,
+            "can_transfer": False,
+        },
+    )
+    assert created.status_code == 201
+    data = created.json()
+    assert data["voice_greeting"] == "Welcome to Blossom Florists."
+    assert data["after_hours_behavior"] == "continue"
+    assert data["recording_enabled"] is True
+    assert data["max_call_duration_minutes"] == 20
+    assert data["can_transfer"] is False
+
+    patched = client.patch(
+        f"/agents/{data['id']}", {"after_hours_behavior": "message"}
+    )
+    assert patched.status_code == 200
+    assert patched.json()["after_hours_behavior"] == "message"
+    assert patched.json()["can_transfer"] is False
+
+
 def test_agent_create_validation(tenant):
     _, _, client = tenant
     assert client.post("/agents", {"name": "", "system_prompt": ""}).status_code == 400

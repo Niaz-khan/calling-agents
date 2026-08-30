@@ -13,6 +13,7 @@ const API_PREFIXES = [
   '/customers',
   '/appointments',
   '/phone-numbers',
+  '/telephony',
   '/knowledge',
   '/analytics',
 ]

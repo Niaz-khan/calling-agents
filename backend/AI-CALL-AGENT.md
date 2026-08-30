@@ -1346,22 +1346,56 @@ Make the website channel production-grade and sellable before spending on teleph
 * [ ] Website analytics (unique visitors, conversation length, tool calls, appointments booked)
 * [ ] Online/offline presence handling
 
----
+## Phase 10 — Production Telephony (completed milestone)
 
-# 34. Current Task
+Production-grade phone infrastructure on top of the Phase 4 foundation-plus:
+
+* [x] `PhoneNumber` upgrades — provider choices (`twilio`/`telnyx`/`other`),
+      `country`, `capabilities` (`voice`/`sms`), `inbound_enabled` /
+      `outbound_enabled` (+ dashboard connect form and per-flag toggles)
+* [x] Agent voice configuration — `voice_greeting`, `after_hours_behavior`
+      (`message` default / `continue`), `recording_enabled`,
+      `max_call_duration_minutes`, `can_transfer` (+ dashboard form)
+* [x] After-hours gate — inbound calls outside business hours play a courtesy
+      message and hang up (configurable per agent); the call/transcript is
+      still persisted
+* [x] Outbound calling — `POST /calls/outbound`, outbound status webhook
+      (resolves by call sid, never auto-creates), dashboard "New outbound call"
+      flow; teardown marks `FAILED` and closes on provider error (502 to client)
+* [x] Human transfer — `transfer_to_human` tool authorizes on
+      `agent.can_transfer`; the transfer endpoint dials `Organization.transfer_phone_number`
+      via TwiML `<Dial>` (fallback hangup); graceful when no target is set
+* [x] Max call duration enforcement + empty-speech re-prompt in the gather loop
+* [x] Recording persistence (`recording_url` from status callback, enabled-gated)
+* [x] Telnyx provider — Ed25519-signed webhook (`TELNYX_PUBLIC_KEY`), inbound
+      create + `answer`, normalized call events; `verify_credentials()` +
+      `/telephony/status` connection card
+* [x] Structured logging and safe errors; no secrets exposed anywhere
+* [x] Tests: **207 passing** including after-hours, transfer auth, outbound,
+      recording, max-duration, Telnyx signature/inbound/status, connection status
+
+Audio streaming (Media Streams websocket) and KYC/verification remain future
+work. Live Twilio/Telnyx smoke tests are still gated on a provisioned number.
+
+---
 
 ## CURRENT PHASE
 
-**Phase 9 — Production Website Channel**
+**Phase 10 — Production Telephony** (backend + dashboard complete; live smoke
+test gated on a provisioned Twilio number)
 
-(Milestone behind us: Phase 8 multi-channel website + API foundation, the shared
-conversation engine, deployment management, public chat API and widget.)
+(Milestones behind us: Phase 8 multi-channel website + API foundation and
+Phase 10 production telephony. The shared conversation engine, deployment
+management, public chat API and widget ship with every channel.)
 
 ## CURRENT OBJECTIVE
 
-Make the website channel production-grade and sellable before spending on
-telephony: a business deploys an agent on its website in minutes, then connects
-a phone number later.
+Delivered: production-grade phone numbers (provider, country, capabilities,
+inbound/outbound flags), agent voice configuration (greeting, after-hours
+behavior, recording, max duration, transfer), outbound calling, human transfer,
+Telnyx support, connection status UX and 207 passing tests. Remaining for the
+website channel (Phase 9): rate limiting, widget branding, deployment UI,
+analytics.
 
 ### Multi-channel architecture
 
@@ -1548,8 +1582,10 @@ conversation, transcript, summary and outcome.
       replaces the utterance-level Gather loop with real-time audio. Needs the
       mu-law codec and a websocket transport on top of the existing
       `VoiceSessionEngine`.
-* [ ] **Call recording** — save Twilio recording URLs onto `PhoneCall.recording_url`
-      and expose them in the transcript flow.
+* [x] **Call recording** — recording configured at the agent level
+      (`recording_enabled`); Twilio recording URLs are persisted onto
+      `PhoneCall.recording_url` when a call is recorded. (Storing the audio
+      itself is left to the client; transcription is already persisted.)
 
 ---
 
@@ -1800,7 +1836,8 @@ Public chat API (/public/chat)      ██████████████�
 Website widget (/widget.js)         ████████████████████ 100%
 Domain policy + CORS                ████████████████████ 100%
 Rate limiting (public endpoints)    ░░░░░░░░░░░░░░░░░░░░   0%
-Voice / telephony (foundation)      ██████████████████░░  90%  (live call pending a Twilio number)
+Voice / telephony (foundation)      ████████████████████ 100%  (outbound calling + Telnyx)
+Voice / telephony (production)      ██████████████████░░  90%  (live call pending a Twilio number)
 Production                          ░░░░░░░░░░░░░░░░░░░░   0%
 ```
 
@@ -1808,8 +1845,10 @@ Production                          ░░░░░░░░░░░░░░�
 
 # 40. Immediate Next Action
 
-Phase 8 (multi-channel website + API) is complete with 157 passing tests. The
-website channel is the current focus:
+Phase 10 (production telephony) ships as a milestone with **207 passing tests**:
+outbound calling, human transfer, after-hours handling, agent voice
+configuration, Telnyx support and the connection status card. The website
+channel remains the open production funnel:
 
 1. Harden the public surface: rate limiting/throttling, stricter origin
    validation, abuse protection on `/public/chat`.
@@ -1821,9 +1860,9 @@ website channel is the current focus:
    appointments booked).
 
 Telephony live verification remains gated on purchasing a Twilio number (the
-trial account cannot attach custom webhooks to calls). The Twilio code path and
-Telnyx fallback provider are implemented and tested; once a number exists they
-follow the F.34 go-live steps.
+trial account cannot attach custom webhooks to calls). The Twilio and Telnyx
+providers, outbound calling, transfer and connection checks are implemented and
+tested with fakes; once a number exists they follow the go-live steps above.
 
 ````
 
