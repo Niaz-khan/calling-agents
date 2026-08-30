@@ -15,16 +15,21 @@ class EmbeddingProvider(Protocol):
 
 
 class OpenAIEmbeddingProvider:
-    def __init__(self, model, dimensions, api_key):
+    """OpenAI-compatible embeddings provider (OpenAI, Jina, Mistral, ...)."""
+
+    def __init__(self, model, dimensions, api_key, base_url=None):
         if not api_key:
-            raise EmbeddingError("LLM_API_KEY is not configured")
+            raise EmbeddingError("EMBEDDING_API_KEY is not configured")
         try:
             from openai import OpenAI
         except ImportError as exc:
             raise EmbeddingError("The openai package is not installed") from exc
         self.model = model
         self.dimensions = dimensions
-        self._client = OpenAI(api_key=api_key)
+        kwargs = {"api_key": api_key}
+        if base_url:
+            kwargs["base_url"] = base_url
+        self._client = OpenAI(**kwargs)
 
     def embed(self, texts):
         try:
@@ -49,7 +54,8 @@ def get_embedding_provider():
             _provider = OpenAIEmbeddingProvider(
                 settings.EMBEDDING_MODEL,
                 settings.EMBEDDING_DIMENSIONS,
-                settings.LLM_API_KEY,
+                settings.EMBEDDING_API_KEY or settings.LLM_API_KEY,
+                settings.EMBEDDING_BASE_URL,
             )
         else:
             raise EmbeddingError(f"Unsupported embedding provider: {provider_type}")
