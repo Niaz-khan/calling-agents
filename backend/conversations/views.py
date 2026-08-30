@@ -146,7 +146,7 @@ class CallViewSet(OrganizationModelViewSet):
         except LLMError:
             if conversation.outcome is None:
                 conversation.outcome = classify_call_outcome(conversation)
-            conversation.save()
+        conversation.save(update_fields=["status", "ended_at", "outcome"])
         if phone_call is not None and phone_call.provider_status not in (
             PhoneCallStatus.TRANSFERRED,
             PhoneCallStatus.COMPLETED,
