@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     "crm",
     "conversations",
     "appointments",
+    "services",
     "knowledge",
     "telephony",
     "voice",

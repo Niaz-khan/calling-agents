@@ -30,6 +30,10 @@ urlpatterns = [
             }
         ),
     ),
+    path(
+        "deployments/<int:pk>/analytics",
+        DeploymentViewSet.as_view({"get": "analytics"}),
+    ),
     path("public/chat/<str:identifier>", PublicChatView.as_view()),
     path("public/config/<str:identifier>", widget_config),
     path("widget.js", widget_js),

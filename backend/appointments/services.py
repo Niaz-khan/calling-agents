@@ -6,6 +6,8 @@ the AI booking tool. The LLM never decides availability; the backend does.
 
 from datetime import datetime
 
+from services.models import Service
+
 from .models import Appointment
 
 
@@ -37,6 +39,7 @@ def create_appointment(
     start_time,
     end_time,
     notes=None,
+    service_id=None,
 ):
     """Create a scheduled appointment, raising ValueError on invalid/overlap."""
     if not isinstance(start_time, datetime) or not isinstance(end_time, datetime):
@@ -46,10 +49,19 @@ def create_appointment(
     if not check_availability(organization, agent_id, start_time, end_time):
         raise ValueError("The requested time is not available")
 
+    service = None
+    if service_id is not None:
+        service = Service.objects.filter(
+            id=service_id, organization=organization, active=True
+        ).first()
+        if service is None:
+            raise ValueError("The requested service does not exist")
+
     return Appointment.objects.create(
         organization=organization,
         agent_id=agent_id,
         conversation_id=call_id,
+        service=service,
         customer_name=customer_name,
         customer_phone=customer_phone,
         start_time=start_time,

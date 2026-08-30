@@ -8,7 +8,7 @@ Unknown tools are rejected.
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from agents.models import Agent
 from appointments.services import check_availability, create_appointment
@@ -16,6 +16,7 @@ from conversations.models import Conversation, PhoneCallStatus
 from crm.models import Customer
 from knowledge.embeddings import EmbeddingError
 from knowledge.services import search_knowledge_base as knowledge_search
+from services.models import Service
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +24,31 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "list_services",
+            "description": (
+                "List the services the business currently offers, including name, "
+                "description, duration in minutes, price and currency. Call this "
+                "whenever the customer asks what services exist, how much a service "
+                "costs, or how long an appointment lasts. The returned service id is "
+                "required when checking availability or booking for a specific service. "
+                "Never invent services, prices or durations yourself."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "check_appointment_availability",
-            "description": "Check if a time slot is available for booking an appointment.",
+            "description": (
+                "Check if a time slot is available for booking an appointment. When "
+                "the customer has selected a service, pass its service_id and the "
+                "tool derives the correct end time from the service duration; an "
+                "LLM-supplied end time is ignored in that case."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -34,10 +58,17 @@ TOOL_DEFINITIONS = [
                     },
                     "end_time": {
                         "type": "string",
-                        "description": "End time in ISO 8601 format (e.g. 2026-08-28T15:30:00)",
+                        "description": (
+                            "End time in ISO 8601 format. Optional when service_id is "
+                            "provided (the service duration is used)."
+                        ),
+                    },
+                    "service_id": {
+                        "type": "integer",
+                        "description": "Id of the selected service from list_services.",
                     },
                 },
-                "required": ["start_time", "end_time"],
+                "required": ["start_time"],
             },
         },
     },
@@ -63,14 +94,21 @@ TOOL_DEFINITIONS = [
                     },
                     "end_time": {
                         "type": "string",
-                        "description": "End time in ISO 8601 format (e.g. 2026-08-28T15:30:00)",
+                        "description": (
+                            "End time in ISO 8601 format. Optional when service_id is "
+                            "provided (the service duration is used)."
+                        ),
+                    },
+                    "service_id": {
+                        "type": "integer",
+                        "description": "Id of the selected service from list_services.",
                     },
                     "notes": {
                         "type": "string",
                         "description": "Optional notes for the appointment",
                     },
                 },
-                "required": ["customer_name", "customer_phone", "start_time", "end_time"],
+                "required": ["customer_name", "customer_phone", "start_time"],
             },
         },
     },
@@ -144,12 +182,51 @@ def _owned_agent(organization, agent_id):
     return Agent.objects.filter(id=agent_id, organization=organization).first()
 
 
-def check_appointment_availability(organization, agent_id, start_time, end_time):
+def _owned_service(organization, service_id):
+    return Service.objects.filter(
+        id=service_id, organization=organization, active=True
+    ).first()
+
+
+def list_services(organization):
+    services = Service.objects.filter(organization=organization, active=True).order_by(
+        "name"
+    )
+    return {
+        "services": [
+            {
+                "id": service.id,
+                "name": service.name,
+                "description": service.description or "",
+                "duration_minutes": service.duration_minutes,
+                "price": str(service.price) if service.price is not None else None,
+                "currency": service.currency,
+            }
+            for service in services
+        ]
+    }
+
+
+def check_appointment_availability(
+    organization, agent_id, start_time, end_time=None, service_id=None
+):
+    if start_time is None:
+        return {"error": "start_time is required"}
+
+    if service_id is not None:
+        service = _owned_service(organization, service_id)
+        if service is None:
+            return {"error": "The requested service does not exist"}
+        end_time = start_time + timedelta(minutes=service.duration_minutes)
+    elif end_time is None:
+        return {"error": "end_time is required when no service is selected"}
+
     available = check_availability(organization, agent_id, start_time, end_time)
     return {
         "available": available,
         "requested_start": start_time.isoformat(),
         "requested_end": end_time.isoformat(),
+        "service_id": service_id,
     }
 
 
@@ -162,6 +239,7 @@ def book_appointment(
     start_time,
     end_time,
     notes=None,
+    service_id=None,
 ):
     try:
         appointment = create_appointment(
@@ -173,6 +251,7 @@ def book_appointment(
             start_time=start_time,
             end_time=end_time,
             notes=notes,
+            service_id=service_id,
         )
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
@@ -180,6 +259,8 @@ def book_appointment(
     return {
         "success": True,
         "appointment_id": appointment.id,
+        "service_id": service_id,
+        "service_name": appointment.service.name if appointment.service else None,
         "requested_start": appointment.start_time.isoformat(),
         "requested_end": appointment.end_time.isoformat(),
         "customer_name": appointment.customer_name,
@@ -285,23 +366,48 @@ def execute_tool(organization, agent_id, call_id, tool_name, arguments):
 
 
 def _dispatch(organization, agent_id, call_id, tool_name, args):
+    if tool_name == "list_services":
+        return list_services(organization)
+
     if tool_name == "check_appointment_availability":
         try:
             start_time = _parse_time(args["start_time"])
-            end_time = _parse_time(args["end_time"])
         except (KeyError, ValueError):
-            return {"error": "Invalid start_time or end_time"}
+            return {"error": "Invalid start_time"}
 
+        end_time = None
+        raw_end = args.get("end_time")
+        if raw_end:
+            try:
+                end_time = _parse_time(raw_end)
+            except ValueError:
+                return {"error": "Invalid end_time"}
+
+        service_id = args.get("service_id")
         return check_appointment_availability(
-            organization, agent_id, start_time, end_time
+            organization, agent_id, start_time, end_time, service_id
         )
 
     if tool_name == "book_appointment":
         try:
             start_time = _parse_time(args["start_time"])
-            end_time = _parse_time(args["end_time"])
         except (KeyError, ValueError):
-            return {"error": "Invalid start_time or end_time"}
+            return {"error": "Invalid start_time"}
+
+        service_id = args.get("service_id")
+        service = None
+        if service_id is not None:
+            service = _owned_service(organization, service_id)
+            if service is None:
+                return {"error": "The requested service does not exist"}
+
+        if service is not None:
+            end_time = start_time + timedelta(minutes=service.duration_minutes)
+        else:
+            try:
+                end_time = _parse_time(args["end_time"])
+            except (KeyError, ValueError):
+                return {"error": "Invalid end_time"}
 
         customer_name = str(args.get("customer_name") or "").strip()
         customer_phone = str(args.get("customer_phone") or "").strip()
@@ -317,6 +423,7 @@ def _dispatch(organization, agent_id, call_id, tool_name, args):
             start_time=start_time,
             end_time=end_time,
             notes=args.get("notes"),
+            service_id=service_id,
         )
 
     if tool_name == "lookup_customer":

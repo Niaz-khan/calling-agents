@@ -17,6 +17,7 @@ from conversations.models import (
 )
 from crm.models import Customer
 from knowledge.models import KnowledgeBase, KnowledgeChunk, KnowledgeDocument
+from services.models import Service
 from tenancy.models import Organization
 
 pytestmark = pytest.mark.django_db
@@ -241,6 +242,7 @@ class TestAgentOrchestrator:
 
 def test_tool_registry_contains_all_tools():
     for name in [
+        "list_services",
         "check_appointment_availability",
         "book_appointment",
         "lookup_customer",
@@ -391,6 +393,171 @@ class TestSearchKnowledgeBaseTool:
             execute_tool(org, agent.id, None, "search_knowledge_base", "{}")
         )
         assert "error" in result
+
+
+class TestServicesTools:
+    def _services(self, org):
+        return Service.objects.create(
+            organization=org,
+            name="Consultation",
+            description="Dental consultation",
+            duration_minutes=30,
+            price="50.00",
+            currency="USD",
+        )
+
+    def test_list_services_returns_active_org_services(self, org_agent):
+        org, agent = org_agent
+        self._services(org)
+        Service.objects.create(
+            organization=org, name="Hidden", duration_minutes=60, active=False
+        )
+        other = Organization.objects.create(name="Rival")
+        Service.objects.create(
+            organization=other, name="Foreign", duration_minutes=15
+        )
+
+        data = json.loads(
+            execute_tool(org, agent.id, None, "list_services", "{}")
+        )
+        names = [row["name"] for row in data["services"]]
+        assert names == ["Consultation"]
+        row = data["services"][0]
+        assert row["duration_minutes"] == 30
+        assert row["price"] == "50.00"
+        assert row["currency"] == "USD"
+        assert row["id"] == Service.objects.get(name="Consultation").id
+
+    def test_availability_uses_service_duration(self, org_agent):
+        org, agent = org_agent
+        service = self._services(org)
+        start, _ = _slot(0)
+        result = json.loads(
+            execute_tool(
+                org, agent.id, None, "check_appointment_availability",
+                json.dumps({"start_time": start.isoformat(), "service_id": service.id}),
+            )
+        )
+        assert result["available"] is True
+        assert result["requested_end"] == (start + timedelta(minutes=30)).isoformat()
+        assert result["service_id"] == service.id
+
+    def test_availability_rejects_end_only_llm_end_ignored_with_service(self, org_agent):
+        org, agent = org_agent
+        service = self._services(org)
+        start, _ = _slot(0)
+        result = json.loads(
+            execute_tool(
+                org, agent.id, None, "check_appointment_availability",
+                json.dumps({
+                    "start_time": start.isoformat(),
+                    "end_time": (start + timedelta(hours=3)).isoformat(),
+                    "service_id": service.id,
+                }),
+            )
+        )
+        # The service duration is authoritative; the LLM-supplied end is ignored.
+        assert result["requested_end"] == (start + timedelta(minutes=30)).isoformat()
+
+    def test_availability_requires_end_without_service(self, org_agent):
+        org, agent = org_agent
+        start, _ = _slot(0)
+        result = json.loads(
+            execute_tool(
+                org, agent.id, None, "check_appointment_availability",
+                json.dumps({"start_time": start.isoformat()}),
+            )
+        )
+        assert "error" in result
+
+    def test_availability_rejects_foreign_or_inactive_service(self, org_agent):
+        org, agent = org_agent
+        start, _ = _slot(0)
+        other = Organization.objects.create(name="Rival")
+        foreign = Service.objects.create(
+            organization=other, name="Foreign", duration_minutes=30
+        )
+        result = json.loads(
+            execute_tool(
+                org, agent.id, None, "check_appointment_availability",
+                json.dumps({"start_time": start.isoformat(), "service_id": foreign.id}),
+            )
+        )
+        assert "error" in result
+
+    def test_book_with_service_derives_end_and_links(self, org_agent):
+        org, agent = org_agent
+        service = self._services(org)
+        start, _ = _slot(0)
+        result = json.loads(
+            execute_tool(
+                org, agent.id, None, "book_appointment",
+                json.dumps({
+                    "customer_name": "Jane",
+                    "customer_phone": "+15551234567",
+                    "start_time": start.isoformat(),
+                    "end_time": (start + timedelta(hours=5)).isoformat(),
+                    "service_id": service.id,
+                }),
+            )
+        )
+        assert result["success"] is True
+        assert result["service_id"] == service.id
+        assert result["service_name"] == "Consultation"
+        assert result["requested_end"] == (start + timedelta(minutes=30)).isoformat()
+        appointment = Appointment.objects.get()
+        assert appointment.service == service
+        assert appointment.start_time == start
+        assert appointment.end_time == start + timedelta(minutes=30)
+
+    def test_book_rejects_foreign_service(self, org_agent):
+        org, agent = org_agent
+        start, _ = _slot(0)
+        other = Organization.objects.create(name="Rival")
+        foreign = Service.objects.create(
+            organization=other, name="Foreign", duration_minutes=30
+        )
+        result = json.loads(
+            execute_tool(
+                org, agent.id, None, "book_appointment",
+                json.dumps({
+                    "customer_name": "Jane",
+                    "customer_phone": "+15551234567",
+                    "start_time": start.isoformat(),
+                    "end_time": (start + timedelta(minutes=30)).isoformat(),
+                    "service_id": foreign.id,
+                }),
+            )
+        )
+        assert "error" in result
+        assert Appointment.objects.count() == 0
+
+    def test_book_rejects_overlap_between_service_slots(self, org_agent):
+        org, agent = org_agent
+        service = self._services(org)
+        start, _ = _slot(0)
+        execute_tool(
+            org, agent.id, None, "book_appointment",
+            json.dumps({
+                "customer_name": "First",
+                "customer_phone": "+15551111111",
+                "start_time": start.isoformat(),
+                "service_id": service.id,
+            }),
+        )
+        overlap = json.loads(
+            execute_tool(
+                org, agent.id, None, "book_appointment",
+                json.dumps({
+                    "customer_name": "Second",
+                    "customer_phone": "+15552222222",
+                    "start_time": (start + timedelta(minutes=15)).isoformat(),
+                    "service_id": service.id,
+                }),
+            )
+        )
+        assert overlap["success"] is False
+        assert "error" in overlap
 
 
 class TestTransferToHumanTool:

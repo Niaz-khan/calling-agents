@@ -20,6 +20,13 @@ class Appointment(models.Model):
         blank=True,
         null=True,
     )
+    service = models.ForeignKey(
+        "services.Service",
+        on_delete=models.SET_NULL,
+        related_name="appointments",
+        blank=True,
+        null=True,
+    )
     customer_name = models.CharField(max_length=255)
     customer_phone = models.CharField(max_length=50)
     start_time = models.DateTimeField()

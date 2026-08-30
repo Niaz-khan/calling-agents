@@ -27,6 +27,7 @@ from conversations.models import (
     ConversationStatus,
 )
 from conversations.services import run_agent_turn
+from tenancy.services import is_business_open
 
 from .models import AgentDeployment
 from .widget_assets import WIDGET_HTML, WIDGET_JS
@@ -313,12 +314,12 @@ def widget_config(request, identifier):
 
     return JsonResponse(
         {
-            "identifier": deployment.public_identifier,
-            "agent": {"name": deployment.agent.name},
             "title": deployment.widget_title or deployment.agent.name or "Chat with us",
             "primary_color": deployment.widget_primary_color or DEFAULT_WIDGET_COLOR,
             "welcome_message": deployment.welcome_message or "",
-            "online": True,
+            "agent_name": deployment.agent.name,
+            "business_name": deployment.organization.display_name,
+            "online": is_business_open(deployment.organization),
         },
         headers=headers,
     )

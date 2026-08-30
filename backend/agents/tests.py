@@ -543,12 +543,20 @@ class TestWidgetConfig:
         assert resp.status_code == 200
         assert resp["Access-Control-Allow-Origin"] == "https://acme.com"
         data = resp.json()
-        assert data["identifier"] == deployment.public_identifier
-        assert data["agent"] == {"name": "Receptionist"}
         assert data["title"] == "Acme Support"
         assert data["primary_color"] == "#0F766E"
         assert data["welcome_message"] == "Hi! Ask me about appointments."
+        assert data["agent_name"] == "Receptionist"
+        assert data["business_name"] == "Acme"
         assert data["online"] is True
+        assert set(data) == {
+            "title",
+            "primary_color",
+            "welcome_message",
+            "agent_name",
+            "business_name",
+            "online",
+        }
 
     def test_config_defaults_when_unset(self, tenant, api_client):
         _, org, _ = tenant
@@ -559,6 +567,30 @@ class TestWidgetConfig:
         assert data["title"] == "Receptionist"
         assert data["primary_color"] == "#4f46e5"
         assert data["welcome_message"] == ""
+        assert data["agent_name"] == "Receptionist"
+        assert data["business_name"] == "Acme"
+        assert data["online"] is True
+
+    def test_config_online_matches_business_presence(self, tenant, api_client):
+        from tenancy.services import is_business_open
+
+        _, org, _ = tenant
+        org.timezone = "UTC"
+        org.business_hours = {
+            "1": {"start": "09:00", "end": "17:00"},
+            "2": {"start": "09:00", "end": "17:00"},
+            "3": {"start": "09:00", "end": "17:00"},
+            "4": {"start": "09:00", "end": "17:00"},
+            "5": {"start": "09:00", "end": "17:00"},
+            "6": {"start": "09:00", "end": "13:00"},
+        }
+        org.save()
+
+        deployment = self._deployment(org)
+        data = api_client.get(
+            f"/public/config/{deployment.public_identifier}"
+        ).json()
+        assert data["online"] is is_business_open(org)
 
     def test_config_rejects_disallowed_origin(self, tenant, api_client):
         _, org, _ = tenant

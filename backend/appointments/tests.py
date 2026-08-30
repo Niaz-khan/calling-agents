@@ -4,6 +4,7 @@ import pytest
 from django.utils import timezone
 
 from agents.models import Agent
+from services.models import Service
 
 pytestmark = pytest.mark.django_db
 
@@ -105,3 +106,47 @@ def test_appointment_delete_and_isolation(tenant, stranger):
 
     assert client.delete(f"/appointments/{created['id']}").status_code == 204
     assert client.get(f"/appointments/{created['id']}").status_code == 404
+
+
+def test_appointment_with_service(tenant):
+    _, org, client = tenant
+    agent = _agent(org)
+    service = Service.objects.create(
+        organization=org, name="Checkup", duration_minutes=30, price="45.00"
+    )
+    start, end = _times()
+    created = client.post(
+        "/appointments",
+        {**_base_payload(agent, start, end), "service_id": service.id},
+    )
+    assert created.status_code == 201
+    data = created.json()
+    assert data["service_name"] == "Checkup"
+    assert data["service_id"] == service.id
+
+    listed = client.get("/appointments").json()
+    assert listed[0]["service_name"] == "Checkup"
+
+
+def test_appointment_rejects_other_org_service(tenant, stranger):
+    _, org, client = tenant
+    _, stranger_org, _ = stranger
+    agent = _agent(org)
+    foreign = Service.objects.create(
+        organization=stranger_org, name="Rival Service", duration_minutes=30
+    )
+    start, end = _times()
+    resp = client.post(
+        "/appointments",
+        {**_base_payload(agent, start, end), "service_id": foreign.id},
+    )
+    assert resp.status_code == 400
+
+    inactive = Service.objects.create(
+        organization=org, name="Retired", duration_minutes=15, active=False
+    )
+    resp = client.post(
+        "/appointments",
+        {**_base_payload(agent, start, end), "service_id": inactive.id},
+    )
+    assert resp.status_code == 400

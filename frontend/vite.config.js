@@ -6,6 +6,9 @@ const API_PROXY_TARGET = process.env.VITE_API_TARGET || 'http://127.0.0.1:8000'
 const API_PREFIXES = [
   '/auth',
   '/agents',
+  '/deployments',
+  '/services',
+  '/business-config',
   '/calls',
   '/customers',
   '/appointments',

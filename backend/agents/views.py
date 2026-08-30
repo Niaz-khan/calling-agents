@@ -5,6 +5,7 @@ from rest_framework.response import Response
 
 from ai.agent import run_agent
 from ai.provider import LLMError
+from analytics.services import deployment_analytics
 from tenancy.drf import OrganizationModelViewSet
 
 from .models import Agent, AgentDeployment
@@ -53,6 +54,16 @@ class DeploymentViewSet(OrganizationModelViewSet):
     queryset = AgentDeployment.objects.all()
     serializer_class = AgentDeploymentSerializer
     not_found_detail = "Deployment not found"
+
+    @action(detail=True, methods=["GET"], url_path="analytics")
+    def analytics(self, request, pk=None):
+        deployment = self.get_object()
+        try:
+            days = int(request.query_params.get("days", 7))
+        except (TypeError, ValueError):
+            days = 7
+        days = max(1, min(days, 90))
+        return Response(deployment_analytics(deployment, days=days))
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())

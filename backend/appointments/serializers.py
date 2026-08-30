@@ -2,6 +2,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 
 from agents.models import Agent
+from services.models import Service
 from tenancy.access import get_request_organization
 from tenancy.drf import Conflict
 
@@ -13,6 +14,8 @@ class AppointmentSerializer(serializers.ModelSerializer):
     organization_id = serializers.IntegerField(read_only=True)
     agent_id = serializers.IntegerField()
     call_id = serializers.IntegerField(source="conversation_id", read_only=True)
+    service_id = serializers.IntegerField(required=False, allow_null=True)
+    service_name = serializers.CharField(source="service.name", read_only=True)
     customer_name = serializers.CharField(min_length=1, max_length=255)
     customer_phone = serializers.CharField(min_length=1, max_length=50)
     start_time = serializers.DateTimeField()
@@ -27,6 +30,8 @@ class AppointmentSerializer(serializers.ModelSerializer):
             "organization_id",
             "agent_id",
             "call_id",
+            "service_id",
+            "service_name",
             "customer_name",
             "customer_phone",
             "start_time",
@@ -35,13 +40,28 @@ class AppointmentSerializer(serializers.ModelSerializer):
             "notes",
             "created_at",
         ]
-        read_only_fields = ["id", "organization_id", "call_id", "created_at"]
+        read_only_fields = ["id", "organization_id", "call_id", "service_name", "created_at"]
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
         if data.get("status"):
             data["status"] = data["status"].lower()
+        if instance.service is not None:
+            data["service_name"] = instance.service.name
         return data
+
+    def validate_service_id(self, value):
+        if value in (None, ""):
+            return None
+        request = self.context.get("request")
+        organization = get_request_organization(request) if request else None
+        if organization is None:
+            return value
+        if not Service.objects.filter(
+            id=value, organization=organization, active=True
+        ).exists():
+            raise serializers.ValidationError("Service not found")
+        return value
 
     def validate_status(self, value):
         normalized = (value or "").upper()

@@ -784,6 +784,106 @@ textarea.input {
   display: inline-block;
 }
 
+/* Analytics / presence on deployment detail */
+.presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.presence-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
+}
+
+.card-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.seg button {
+  border: 0;
+  background: #fff;
+  padding: 6px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.seg button.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.section-sub {
+  margin: 18px 0 6px;
+  font-size: 14px;
+}
+
+.hours-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.hours-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hours-day {
+  width: 110px;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.hours-times {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hours-times .input {
+  width: 120px;
+}
+
+.hours-closed {
+  margin-left: auto;
+}
+
+.service-editor {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.service-editor .field {
+  flex: 1 1 140px;
+}
+
+.service-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.small {
+  font-size: 12px;
+}
+
 @media (max-width: 760px) {
   .snippet-wrap {
     flex-direction: column;
@@ -819,6 +919,12 @@ textarea.input {
   .grid.two,
   .form-grid {
     grid-template-columns: 1fr;
+  }
+  .hours-row {
+    flex-wrap: wrap;
+  }
+  .hours-closed {
+    margin-left: 0;
   }
   .content {
     padding: 16px;
