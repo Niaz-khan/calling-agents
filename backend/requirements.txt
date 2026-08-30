@@ -19,6 +19,10 @@ python-dotenv==1.2.3
 openai==3.6.0
 pypdf==6.16.2
 
+# Voice / telephony
+edge-tts==7.2.8
+httpx==0.28.1
+
 # Password hashing (verifies legacy argon2id hashes)
 argon2-cffi==25.1.0
 

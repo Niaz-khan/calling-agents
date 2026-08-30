@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     "appointments",
     "knowledge",
     "telephony",
+    "voice",
     "analytics",
     "ai",
     "core",
@@ -193,11 +194,15 @@ LLM_BASE_URL = env("LLM_BASE_URL", "") or None
 STT_PROVIDER = env("STT_PROVIDER", "openai")
 STT_MODEL = env("STT_MODEL", "whisper-1")
 STT_LANGUAGE = env("STT_LANGUAGE", "") or None
+STT_API_KEY = env("STT_API_KEY", "") or None
+STT_BASE_URL = env("STT_BASE_URL", "") or None
 
-TTS_PROVIDER = env("TTS_PROVIDER", "openai")
-TTS_MODEL = env("TTS_MODEL", "gpt-4o-mini-tts")
-TTS_VOICE = env("TTS_VOICE", "alloy")
-TTS_FORMAT = env("TTS_FORMAT", "wav")
+TTS_PROVIDER = env("TTS_PROVIDER", "edge")
+TTS_MODEL = env("TTS_MODEL", "en-US-JennyNeural")
+TTS_VOICE = env("TTS_VOICE", "en-US-JennyNeural")
+TTS_FORMAT = env("TTS_FORMAT", "mp3")
+TTS_API_KEY = env("TTS_API_KEY", "") or None
+TTS_BASE_URL = env("TTS_BASE_URL", "") or None
 
 VOICE_MAX_UTTERANCE_SECONDS = int(env("VOICE_MAX_UTTERANCE_SECONDS", "30"))
 VOICE_HEARTBEAT_SECONDS = int(env("VOICE_HEARTBEAT_SECONDS", "20"))
