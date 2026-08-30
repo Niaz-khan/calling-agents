@@ -1,12 +1,16 @@
 from datetime import timedelta
 
+import json
+
 import pytest
 from django.utils import timezone
 
 from agents.models import Agent
+from ai.provider import LLMError
 from conversations.models import (
     Conversation,
     ConversationMessage,
+    ConversationOutcome,
     PhoneCall,
     PhoneCallStatus,
 )
@@ -137,3 +141,149 @@ def test_calls_org_isolation(tenant, stranger):
 def test_call_not_found(tenant):
     _, _, client = tenant
     assert client.get("/calls/999999").status_code == 404
+
+
+class TestSendMessage:
+    def _post(self, client, conversation_id, message):
+        return client.post(
+            f"/calls/{conversation_id}/messages",
+            {"message": message},
+            format="json",
+        )
+
+    def test_direct_response(self, tenant, monkeypatch):
+        _, org, client = tenant
+        agent = _agent(org)
+        conversation = _conv(org, agent, status=PhoneCallStatus.IN_PROGRESS)
+
+        monkeypatch.setattr(
+            "ai.agent.generate_response",
+            lambda messages, tools=None: {
+                "content": "Hello, how can I help?",
+                "tool_calls": [],
+            },
+        )
+
+        response = self._post(client, conversation.id, "I need help")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["call_id"] == conversation.id
+        assert data["role"] == "assistant"
+        assert data["message"] == "Hello, how can I help?"
+
+        roles = list(
+            ConversationMessage.objects.filter(conversation=conversation)
+            .order_by("created_at")
+            .values_list("role", flat=True)
+        )
+        assert roles == ["USER", "ASSISTANT"]
+
+    def test_tool_flow_persists_and_honors_history(self, tenant, monkeypatch):
+        _, org, client = tenant
+        agent = _agent(org)
+        conversation = _conv(org, agent, status=PhoneCallStatus.IN_PROGRESS)
+
+        start = timezone.now() + timedelta(days=1)
+        end = start + timedelta(minutes=30)
+        calls = iter([
+            {
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "function": {
+                            "name": "check_appointment_availability",
+                            "arguments": json.dumps({
+                                "start_time": start.isoformat(),
+                                "end_time": end.isoformat(),
+                            }),
+                        },
+                    }
+                ],
+            },
+            {"content": "Sure, let me check that.", "tool_calls": []},
+            {"content": "Would you like to book it?", "tool_calls": []},
+        ])
+
+        def fake_provider(messages, tools=None):
+            assert isinstance(messages, list)
+            return next(calls)
+
+        monkeypatch.setattr("ai.agent.generate_response", fake_provider)
+
+        first = self._post(client, conversation.id, "Is 3 PM available tomorrow?")
+        assert first.status_code == 200
+        assert first.json()["message"] == "Sure, let me check that."
+
+        roles = list(
+            ConversationMessage.objects.filter(conversation=conversation)
+            .order_by("id")
+            .values_list("role", flat=True)
+        )
+        assert roles == ["USER", "ASSISTANT", "TOOL", "ASSISTANT"]
+        tool_message = ConversationMessage.objects.get(
+            conversation=conversation, role="TOOL"
+        )
+        assert tool_message.tool_call_id == "call_1"
+        assert json.loads(tool_message.content)["available"] is True
+
+        second = self._post(client, conversation.id, "Yes please")
+        assert second.status_code == 200
+        assert second.json()["message"] == "Would you like to book it?"
+
+    def test_message_rejected_when_call_closed(self, tenant, monkeypatch):
+        _, org, client = tenant
+        agent = _agent(org)
+        conversation = _conv(org, agent, status=PhoneCallStatus.COMPLETED)
+        conversation.close()
+        conversation.save()
+
+        monkeypatch.setattr(
+            "ai.agent.generate_response",
+            lambda messages, tools=None: {"content": "x", "tool_calls": []},
+        )
+
+        response = self._post(client, conversation.id, "hello")
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Call is not active"
+
+    def test_llm_unavailable_returns_503(self, tenant, monkeypatch):
+        _, org, client = tenant
+        agent = _agent(org)
+        conversation = _conv(org, agent, status=PhoneCallStatus.IN_PROGRESS)
+
+        def boom(messages, tools=None):
+            raise LLMError("LLM down")
+
+        monkeypatch.setattr("ai.agent.generate_response", boom)
+
+        response = self._post(client, conversation.id, "hello")
+        assert response.status_code == 503
+        assert response.json()["detail"] == "AI service is currently unavailable"
+
+        assert ConversationMessage.objects.filter(
+            conversation=conversation, role="USER"
+        ).count() == 1
+
+
+def test_end_classifies_appointment_outcome(tenant):
+    _, org, client = tenant
+    agent = _agent(org)
+    conversation = _conv(org, agent, status=PhoneCallStatus.IN_PROGRESS)
+    from appointments.models import Appointment
+
+    Appointment.objects.create(
+        organization=org,
+        agent=agent,
+        conversation=conversation,
+        customer_name="Jane",
+        customer_phone="+15551234567",
+        start_time=timezone.now() + timedelta(days=1),
+        end_time=timezone.now() + timedelta(days=1, minutes=30),
+    )
+
+    ended = client.post(f"/calls/{conversation.id}/end")
+    assert ended.status_code == 200
+    assert ended.json()["outcome"] == "appointment_booked"
+    conversation.refresh_from_db()
+    assert conversation.outcome == ConversationOutcome.APPOINTMENT_BOOKED

@@ -14,4 +14,5 @@ urlpatterns = [
             }
         ),
     ),
+    path("agents/<int:pk>/chat", AgentViewSet.as_view({"post": "chat"})),
 ]

@@ -4,9 +4,13 @@ from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 
 from agents.models import Agent
+from ai.provider import LLMError
+from appointments.models import Appointment
 from conversations.models import (
     Conversation,
     ConversationChannel,
+    ConversationOutcome,
+    ConversationStatus,
     PhoneCall,
     PhoneCallStatus,
 )
@@ -19,6 +23,7 @@ from .serializers import (
     CallSerializer,
     MessageDetailSerializer,
 )
+from .services import run_agent_turn
 
 
 class CallCreateSerializer(serializers.Serializer):
@@ -26,6 +31,10 @@ class CallCreateSerializer(serializers.Serializer):
     direction = serializers.ChoiceField(
         choices=["inbound", "outbound"], default="inbound"
     )
+
+
+class MessageCreateSerializer(serializers.Serializer):
+    message = serializers.CharField(min_length=1, max_length=5000)
 
 
 class CallViewSet(OrganizationModelViewSet):
@@ -95,9 +104,35 @@ class CallViewSet(OrganizationModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
-    @action(detail=True, methods=["GET"])
+    @action(detail=True, methods=["GET", "POST"])
     def messages(self, request, pk=None):
         conversation = self.get_object()
+
+        if request.method == "POST":
+            if conversation.status != ConversationStatus.OPEN:
+                return Response(
+                    {"detail": "Call is not active"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            serializer = MessageCreateSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            try:
+                result = run_agent_turn(
+                    conversation, conversation.agent, serializer.validated_data["message"]
+                )
+            except LLMError:
+                return Response(
+                    {"detail": "AI service is currently unavailable"},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            return Response(
+                {
+                    "call_id": conversation.id,
+                    "role": "assistant",
+                    "message": result.response,
+                }
+            )
+
         return Response(
             MessageDetailSerializer(conversation.messages.all(), many=True).data
         )
@@ -107,7 +142,15 @@ class CallViewSet(OrganizationModelViewSet):
         conversation = self.get_object()
         phone_call = conversation.phone_call
         conversation.close()
+        if conversation.outcome is None:
+            conversation.outcome = self._classify_outcome(conversation)
         conversation.save()
         phone_call.provider_status = PhoneCallStatus.COMPLETED
         phone_call.save(update_fields=["provider_status"])
         return Response(CallSerializer(conversation).data)
+
+    @staticmethod
+    def _classify_outcome(conversation):
+        if Appointment.objects.filter(conversation=conversation).exists():
+            return ConversationOutcome.APPOINTMENT_BOOKED
+        return ConversationOutcome.UNKNOWN

@@ -71,6 +71,7 @@ INSTALLED_APPS = [
     "knowledge",
     "telephony",
     "analytics",
+    "ai",
     "core",
 ]
 

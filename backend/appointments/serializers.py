@@ -6,6 +6,7 @@ from tenancy.access import get_request_organization
 from tenancy.drf import Conflict
 
 from .models import Appointment
+from .services import check_availability
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
@@ -67,15 +68,12 @@ class AppointmentSerializer(serializers.ModelSerializer):
                     "Appointment end time must be after start time"
                 )
             if agent_id is not None and organization is not None:
-                overlapping = Appointment.objects.filter(
-                    organization=organization,
-                    agent_id=agent_id,
-                    status=Appointment.Status.SCHEDULED,
-                    start_time__lt=end,
-                    end_time__gt=start,
-                )
-                if instance is not None:
-                    overlapping = overlapping.exclude(pk=instance.pk)
-                if overlapping.exists():
+                if not check_availability(
+                    organization,
+                    agent_id,
+                    start,
+                    end,
+                    exclude_id=instance.pk if instance else None,
+                ):
                     raise Conflict("The requested time is not available")
         return attrs
