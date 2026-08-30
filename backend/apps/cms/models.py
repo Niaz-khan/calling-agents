@@ -21,6 +21,7 @@ DEFAULT_SECTIONS = [
     {"key": "how_works", "enabled": True},
     {"key": "website", "enabled": True},
     {"key": "phone", "enabled": True},
+    {"key": "api", "enabled": True},
     {"key": "use_cases", "enabled": True},
     {"key": "analytics", "enabled": True},
     {"key": "pricing", "enabled": True},
@@ -37,6 +38,7 @@ SECTION_LABELS = {
     "how_works": "How it works",
     "website": "Website widget",
     "phone": "Phone agent",
+    "api": "API & integrations",
     "use_cases": "Use cases",
     "analytics": "Analytics",
     "pricing": "Pricing",
@@ -119,8 +121,8 @@ class LandingPage(TimestampedModel):
             "customers, and hand off to your team — automatically."
         )
     )
-    hero_primary_cta = models.CharField(max_length=64, default="Create your AI agent")
-    hero_secondary_cta = models.CharField(max_length=64, default="See how it works")
+    hero_primary_cta = models.CharField(max_length=64, default="Start for free")
+    hero_secondary_cta = models.CharField(max_length=64, default="Book a demo")
 
     value_strip_title = models.CharField(max_length=255, default="One AI agent. Every customer channel.")
     value_strip_items = models.JSONField(
@@ -180,6 +182,17 @@ class LandingPage(TimestampedModel):
     )
     phone_section_cta = models.CharField(max_length=64, default="Set up phone agent")
 
+    api_section_title = models.CharField(
+        max_length=255, default="Put your AI agent inside your own products."
+    )
+    api_section_text = models.TextField(
+        default=(
+            "Expose your agent as a conversation API. Custom apps, CRMs and support "
+            "tools can hand conversations to your AI — no phone number or website needed."
+        )
+    )
+    api_section_cta = models.CharField(max_length=64, default="Explore the API")
+
     use_cases_title = models.CharField(max_length=255, default="Built for the way service businesses work.")
     use_cases_subtitle = models.TextField(
         default="Configure your agent for the questions your customers actually ask."
@@ -214,11 +227,16 @@ class LandingPage(TimestampedModel):
             for item in self.sections
             if isinstance(item, dict) and "key" in item
         }
+        ordered = [item["key"] for item in self.sections if isinstance(item, dict)]
         if not stored:
             stored = {item["key"]: item["enabled"] for item in DEFAULT_SECTIONS}
-        ordered = [item["key"] for item in self.sections if isinstance(item, dict)]
         if not ordered:
             ordered = [item["key"] for item in DEFAULT_SECTIONS]
+        # Append default sections a stored config predates (e.g. "api") so
+        # newly added sections surface without a manual edit by the admin.
+        for default in DEFAULT_SECTIONS:
+            if default["key"] not in ordered:
+                ordered.append(default["key"])
         merged = []
         for key in ordered:
             if key in SECTION_LABELS:

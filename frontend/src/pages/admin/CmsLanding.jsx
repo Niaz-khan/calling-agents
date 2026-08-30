@@ -186,7 +186,7 @@ export default function CmsLanding() {
           </div>
         </Card>
 
-        <Card title="Website & phone">
+        <Card title="Website, phone & API">
           <div className="form-grid">
             {textField('website_section_title', 'Website title')}
             {textField('website_section_text', 'Website text', { area: true })}
@@ -194,6 +194,9 @@ export default function CmsLanding() {
             {textField('phone_section_title', 'Phone title')}
             {textField('phone_section_text', 'Phone text', { area: true })}
             {textField('phone_section_cta', 'Phone CTA')}
+            {textField('api_section_title', 'API title')}
+            {textField('api_section_text', 'API text', { area: true })}
+            {textField('api_section_cta', 'API CTA')}
           </div>
         </Card>
 

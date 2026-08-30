@@ -12,6 +12,7 @@ import {
   HowItWorksSection,
   WebsiteSection,
   PhoneSection,
+  ApiSection,
   UseCasesSection,
   AnalyticsSection,
   PricingSection,
@@ -89,6 +90,8 @@ export function LandingView({ content }) {
               return <WebsiteSection key={section.key} landing={landing} />
             case 'phone':
               return <PhoneSection key={section.key} landing={landing} />
+            case 'api':
+              return <ApiSection key={section.key} landing={landing} />
             case 'use_cases':
               return (
                 <UseCasesSection
@@ -143,16 +146,47 @@ export default function Landing() {
 
   useEffect(() => {
     if (!content) return
-    document.title = content.site.meta_title
-      ? `${content.site.meta_title}`
-      : `${content.site.site_name} — AI Call Agent`
-    let meta = document.querySelector('meta[name="description"]')
-    if (!meta) {
-      meta = document.createElement('meta')
-      meta.setAttribute('name', 'description')
-      document.head.appendChild(meta)
+    const { site } = content
+    const title = site.meta_title ? site.meta_title : `${site.site_name} — AI Call Agent`
+    document.title = title
+    const description = site.meta_description || ''
+    const origin = window.location.origin
+    const ogImage = site.logo || ''
+    const created = []
+
+    const upsert = (selector, attribute, value) => {
+      let el = document.head.querySelector(selector)
+      if (!el) {
+        el = document.createElement('meta')
+        el.setAttribute(attribute, value)
+        document.head.appendChild(el)
+        created.push(el)
+      } else {
+        el.setAttribute(attribute, value)
+      }
     }
-    meta.setAttribute('content', content.site.meta_description || '')
+
+    upsert('meta[name="description"]', 'content', description)
+    upsert('meta[property="og:title"]', 'content', title)
+    upsert('meta[property="og:description"]', 'content', description)
+    upsert('meta[property="og:type"]', 'content', 'website')
+    upsert('meta[property="og:url"]', 'content', `${origin}/`)
+    upsert('meta[name="twitter:card"]', 'content', 'summary')
+    upsert('meta[name="twitter:title"]', 'content', title)
+    upsert('meta[name="twitter:description"]', 'content', description)
+    upsert('meta[name="robots"]', 'content', 'index, follow')
+    if (ogImage) upsert('meta[property="og:image"]', 'content', ogImage)
+
+    let canonical = document.head.querySelector('link[rel="canonical"]')
+    if (!canonical) {
+      canonical = document.createElement('link')
+      canonical.setAttribute('rel', 'canonical')
+      document.head.appendChild(canonical)
+      created.push(canonical)
+    }
+    canonical.setAttribute('href', `${origin}/`)
+
+    return () => created.forEach((el) => el.remove())
   }, [content])
 
   if (!content) {

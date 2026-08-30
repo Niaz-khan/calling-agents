@@ -8,7 +8,7 @@ Restoring a version copies its snapshot back into the editable tables, creating
 a new draft — it never republishes or overwrites silently.
 """
 
-from django.db import transaction
+from django.db import ProgrammingError, transaction
 
 from .models import (
     CmsActivity,
@@ -110,6 +110,7 @@ LANDING_AREAS = [
     ("How it works changed", ["how_works_title", "how_works_steps"]),
     ("Website widget changed", ["website_section_title", "website_section_text", "website_section_cta"]),
     ("Phone agent changed", ["phone_section_title", "phone_section_text", "phone_section_cta"]),
+    ("API & integrations changed", ["api_section_title", "api_section_text", "api_section_cta"]),
     ("Use cases changed", ["use_cases_title", "use_cases_subtitle"]),
     ("Analytics changed", ["analytics_title", "analytics_subtitle"]),
     ("Pricing modified", ["pricing_title", "pricing_subtitle", "pricing_disclaimer"]),
@@ -320,7 +321,18 @@ def ensure_initial_version():
     """Create the first snapshot for already-published sites (one-time)."""
     if CmsVersion.objects.exists():
         return None
-    page = LandingPage.objects.load()
+    try:
+        with transaction.atomic():
+            page = LandingPage.objects.load()
+    except ProgrammingError as exc:
+        # Runs from migration 0003, whose schema predates columns added in
+        # later migrations. Catch outside the inner atomic() so the savepoint
+        # is rolled back and the enclosing migration transaction survives.
+        # Fresh sites have nothing meaningful to snapshot yet; the first
+        # explicit publish creates version 1 instead.
+        if "does not exist" not in str(exc):
+            raise
+        return None
     if not page.is_published:
         return None
     version = CmsVersion.objects.create(

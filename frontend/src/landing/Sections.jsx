@@ -21,6 +21,7 @@ import {
   PhoneVisual,
   ShowcaseVisual,
   AnalyticsVisual,
+  ApiVisual,
 } from './Visuals'
 
 export function scrollToId(id) {
@@ -374,6 +375,40 @@ export function PhoneSection({ landing }) {
               <span>Transfer</span>
               <strong>To your team when it matters</strong>
             </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+export function ApiSection({ landing }) {
+  return (
+    <section className="l-section" id="api">
+      <div className="l-container">
+        <div className="l-split">
+          <div className="l-split-body l-reveal">
+            <span className="l-eyebrow">API</span>
+            <h2>{landing.api_section_title}</h2>
+            <p>{landing.api_section_text}</p>
+            <div className="l-field">
+              <span>Conversation</span>
+              <strong>Starts from any app you build</strong>
+            </div>
+            <div className="l-field">
+              <span>Events</span>
+              <strong>Streamed back to your stack</strong>
+            </div>
+            <div className="l-field">
+              <span>Scoped</span>
+              <strong>Private to your organization</strong>
+            </div>
+            <NavLink to="features" className="l-btn">
+              {landing.api_section_cta}
+            </NavLink>
+          </div>
+          <div className="l-reveal">
+            <ApiVisual />
           </div>
         </div>
       </div>

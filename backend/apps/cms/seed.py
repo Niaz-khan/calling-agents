@@ -105,6 +105,16 @@ DEFAULT_USE_CASES = [
         "description": "Take reservations and answer hours, menu and location questions.",
     },
     {
+        "title": "Automotive",
+        "icon": "car",
+        "description": "Book service visits and answer pricing, warranty and hours questions.",
+    },
+    {
+        "title": "Professional services",
+        "icon": "briefcase",
+        "description": "Capture enquiries and book consultations without a receptionist.",
+    },
+    {
         "title": "Consulting",
         "icon": "briefcase",
         "description": "Capture enquiries, gather project details and book discovery calls.",
@@ -164,6 +174,11 @@ DEFAULT_FAQS = [
         "greeting, after-hours behavior, recording and transfer settings.",
     },
     {
+        "question": "Can I connect my existing phone number?",
+        "answer": "Yes. Add your existing number in Phone Numbers and assign it to an agent. "
+        "Number porting and provisioning are handled through your Twilio account.",
+    },
+    {
         "question": "What phone providers are supported?",
         "answer": "Twilio is the supported telephony provider today. Numbers are connected "
         "through your Twilio account from the Phone Numbers page.",
@@ -181,7 +196,7 @@ DEFAULT_NAV = [
     {"label": "Solutions", "url": "#use-cases"},
     {"label": "How it works", "url": "#how-it-works"},
     {"label": "Pricing", "url": "#pricing"},
-    {"label": "FAQ", "url": "#faq"},
+    {"label": "Resources", "url": "#faq"},
 ]
 
 DEFAULT_FOOTER = [
@@ -283,7 +298,15 @@ DEFAULT_PROBLEM_ITEMS = [
     "Lost customer context",
 ]
 
-DEFAULT_VALUE_STRIP = ["PHONE", "WEBSITE", "APPOINTMENTS", "CUSTOMERS", "KNOWLEDGE", "ANALYTICS"]
+DEFAULT_VALUE_STRIP = [
+    "PHONE",
+    "WEBSITE",
+    "API",
+    "APPOINTMENTS",
+    "CUSTOMERS",
+    "KNOWLEDGE",
+    "ANALYTICS",
+]
 
 DEFAULT_STEPS = [
     {

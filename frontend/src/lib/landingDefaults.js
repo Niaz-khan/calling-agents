@@ -31,6 +31,7 @@ export const defaultLanding = {
     { key: 'how_works', label: 'How it works', enabled: true },
     { key: 'website', label: 'Website widget', enabled: true },
     { key: 'phone', label: 'Phone agent', enabled: true },
+    { key: 'api', label: 'API', enabled: true },
     { key: 'use_cases', label: 'Use cases', enabled: true },
     { key: 'analytics', label: 'Analytics', enabled: true },
     { key: 'pricing', label: 'Pricing', enabled: true },
@@ -41,10 +42,10 @@ export const defaultLanding = {
   hero_title: 'Your AI employee for every customer conversation.',
   hero_subtitle:
     'Answer calls, chat with website visitors, book appointments, qualify customers, and hand off to your team — automatically.',
-  hero_primary_cta: 'Create your AI agent',
-  hero_secondary_cta: 'See how it works',
+  hero_primary_cta: 'Start for free',
+  hero_secondary_cta: 'Book a demo',
   value_strip_title: 'One AI agent. Every customer channel.',
-  value_strip_items: ['PHONE', 'WEBSITE', 'APPOINTMENTS', 'CUSTOMERS', 'KNOWLEDGE', 'ANALYTICS'],
+  value_strip_items: ['PHONE', 'WEBSITE', 'API', 'APPOINTMENTS', 'CUSTOMERS', 'KNOWLEDGE', 'ANALYTICS'],
   problem_title: "Your team shouldn't have to answer the same questions all day.",
   problem_items: [
     'Missed calls',
@@ -92,6 +93,10 @@ export const defaultLanding = {
   phone_section_text:
     'Your agent answers, greets, converses, books, and transfers — on your schedule.',
   phone_section_cta: 'Set up phone agent',
+  api_section_title: 'Put your AI agent inside your own products.',
+  api_section_text:
+    'Expose your agent as a conversation API. Custom apps, CRMs and support tools can hand conversations to your AI — no phone number or website needed.',
+  api_section_cta: 'Explore the API',
   use_cases_title: 'Built for the way service businesses work.',
   use_cases_subtitle: 'Configure your agent for the questions your customers actually ask.',
   analytics_title: 'Know what happened on every conversation.',
@@ -128,6 +133,8 @@ export const defaultCollections = {
     { id: 'salons', title: 'Salons', icon: 'scissors', description: 'Book appointments and answer pricing and availability questions.' },
     { id: 'homeservices', title: 'Home services', icon: 'wrench', description: 'Take service requests, answer FAQs and schedule visits — day or night.' },
     { id: 'restaurants', title: 'Restaurants', icon: 'restaurant', description: 'Take reservations and answer hours, menu and location questions.' },
+    { id: 'automotive', title: 'Automotive', icon: 'car', description: 'Book service visits and answer pricing, warranty and hours questions.' },
+    { id: 'professionalservices', title: 'Professional services', icon: 'briefcase', description: 'Capture enquiries and book consultations without a receptionist.' },
     { id: 'consulting', title: 'Consulting', icon: 'briefcase', description: 'Capture enquiries, gather project details and book discovery calls.' },
     { id: 'smallbusiness', title: 'Small business', icon: 'store', description: 'One agent that never misses a call, however small your team is.' },
   ],
@@ -148,6 +155,7 @@ export const defaultCollections = {
     { question: 'Can I manage multiple businesses?', answer: 'Each account is scoped to its own organization. Agents, numbers, customers and calls stay isolated between organizations.' },
     { question: 'Can I customize how the agent talks?', answer: 'Yes. Every agent has configurable instructions, a system prompt, greeting, after-hours behavior, recording and transfer settings.' },
     { question: 'What phone providers are supported?', answer: 'Twilio is the supported telephony provider today; numbers are connected through your Twilio account.' },
+    { question: 'Can I connect my existing phone number?', answer: 'Yes. Add your existing number in Phone Numbers and assign it to an agent. Number porting and provisioning are handled through your Twilio account.' },
     { question: 'How do I install the website widget?', answer: 'Create a deployment, copy the generated snippet and paste it into your HTML before </body>.' },
   ],
   nav: [
@@ -155,7 +163,7 @@ export const defaultCollections = {
     { label: 'Solutions', url: '#use-cases' },
     { label: 'How it works', url: '#how-it-works' },
     { label: 'Pricing', url: '#pricing' },
-    { label: 'FAQ', url: '#faq' },
+    { label: 'Resources', url: '#faq' },
   ],
   footer: [
     { title: 'Product', links: [{ label: 'AI Agents', url: '#features' }, { label: 'Phone', url: '#phone' }, { label: 'Website Chat', url: '#website' }, { label: 'Appointments', url: '#features' }, { label: 'Analytics', url: '#analytics' }] },

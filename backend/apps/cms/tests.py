@@ -224,6 +224,33 @@ def test_edits_after_publish_do_not_change_public(platformadmin, api_client):
     assert client.get("/platform/cms/landing").json()["hero_title"] == "Second (draft only)"
 
 
+def test_api_section_roundtrips_and_publishes(platformadmin, api_client):
+    _, client = platformadmin
+    client.put(
+        "/platform/cms/landing",
+        {"api_section_title": "API title", "api_section_text": "API text body", "api_section_cta": "Try it"},
+    )
+    draft = client.get("/platform/cms/landing").json()
+    assert draft["api_section_title"] == "API title"
+    assert draft["api_section_text"] == "API text body"
+    # Draft is not visible publicly until published.
+    assert api_client.get("/public/landing-page").json().get("api_section_title") != "API title"
+    client.post("/platform/cms/publish")
+    public = api_client.get("/public/landing-page").json()
+    assert public["api_section_title"] == "API title"
+    assert public["api_section_text"] == "API text body"
+    assert public["api_section_cta"] == "Try it"
+
+
+def test_public_sections_include_api_channel(api_client):
+    resp = api_client.get("/public/landing-page")
+    assert resp.status_code == 200
+    keys = [s["key"] for s in resp.json()["sections"]]
+    assert "api" in keys
+    assert "phone" in keys
+    assert "use_cases" in keys
+
+
 def test_collection_drafts_are_invisible_until_publish(platformadmin, api_client):
     _, client = platformadmin
     client.post("/platform/cms/features", {"title": "Secret feature", "order": 9})

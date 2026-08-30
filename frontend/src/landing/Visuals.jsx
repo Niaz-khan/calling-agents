@@ -174,6 +174,47 @@ export function PhoneVisual({ status = 'Booking your appointment', name = '+1 41
   )
 }
 
+export function ApiVisual() {
+  return (
+    <div className="l-snippet-card l-api-card">
+      <div className="l-api-head">
+        <div className="l-panel-title">
+          <span>POST /v1/agents/front-desk/chat</span>
+        </div>
+        <span className="l-live-pill">API</span>
+      </div>
+      <div className="l-code">
+        <div>
+          <span className="ln">{'{'}</span>
+        </div>
+        <div>
+          <span className="ln">  "message": </span>
+          <span className="st">"Book a cleaning tomorrow at 3 PM."</span>
+          <span className="ln">,</span>
+        </div>
+        <div>
+          <span className="ln">  "customer": </span>
+          <span className="st">"Amara O."</span>
+        </div>
+        <div>
+          <span className="ln">{'}'}</span>
+        </div>
+      </div>
+      <div className="l-api-resp">
+        <div className="l-api-resp-top">
+          <span className="l-live-pill l-resp-ok">200 OK</span>
+          <span className="l-api-tool">check_appointment_availability</span>
+        </div>
+        <div className="l-api-resp-json">
+          <span className="kw">{'"reply"'}</span>
+          <span className="ln">: </span>
+          <span className="st">&quot;Tomorrow at 3 PM is available. Want me to book it?&quot;</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function ShowcaseVisual() {
   const cards = [
     {
