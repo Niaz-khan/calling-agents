@@ -432,6 +432,20 @@ def test_outbound_webhook_answers_with_stream_when_enabled(tenant, api_client):
     )
 
 
+def test_webhook_urls_follow_configured_public_base():
+    """Webhook URLs come from PUBLIC_BASE_URL — never a hardcoded host."""
+    from .services import (
+        get_gather_webhook_url,
+        get_inbound_webhook_url,
+        get_status_webhook_url,
+    )
+
+    with override_settings(PUBLIC_BASE_URL="https://calls.example.com/"):
+        assert get_inbound_webhook_url() == "https://calls.example.com/telephony/webhook/inbound"
+        assert get_status_webhook_url() == "https://calls.example.com/telephony/webhook/status"
+        assert get_gather_webhook_url() == "https://calls.example.com/telephony/webhook/gather"
+
+
 def test_twilio_stream_url_scheme_and_token(tenant):
     from .services import get_twilio_stream_url
 

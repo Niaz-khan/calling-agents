@@ -1,0 +1,105 @@
+# Production Docker stack for AI Call Agent.
+#
+#   nginx (TLS + static + SPA) ──> web (Daphne: Django + Channels) ──> postgres
+#                                      │                              │
+#                                      └──> worker (Celery) ─────> redis
+#
+# Secrets come from backend/.env.production (see .env.production.example).
+# Copy the example, set strong values, then:
+#    cp backend/.env.production.example backend/.env.production
+#    docker compose -f docker-compose.production.yml up -d --build
+#
+# Only nginx exposes ports. Postgres and Redis live on an internal network.
+# HTTPS assumes certbot certificates at ./certs/letsencrypt/live/<DOMAIN>/.
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.production
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [internal]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [internal]
+
+  web:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.production
+    entrypoint: ["sh", "/app/entrypoint.prod.sh"]
+    command: ["daphne", "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [internal]
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.production
+    entrypoint: ["sh", "/app/entrypoint.prod.sh"]
+    command: ["celery", "-A", "config", "worker", "--loglevel=info"]
+    volumes:
+      - media_volume:/app/media
+    depends_on:
+      web:
+        condition: service_started
+    networks: [internal]
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.production
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - static_volume:/usr/share/nginx/staticfiles:ro
+      - media_volume:/usr/share/nginx/mediafiles:ro
+      - ./certs/letsencrypt/live:/etc/letsencrypt/live:ro
+      - ./certs/letsencrypt/archive:/etc/letsencrypt/archive:ro
+      - ./certs/templates:/var/lib/letsencrypt-http:ro
+    depends_on:
+      - web
+    networks: [internal]
+
+networks:
+  internal:
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_volume:
+  media_volume:

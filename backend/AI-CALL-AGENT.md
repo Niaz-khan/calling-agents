@@ -1426,24 +1426,86 @@ reusing the shared `VoiceSessionEngine` + agent/STT/TTS stack:
 
 ## CURRENT PHASE
 
-**Phase 11 — Real-Time Voice Streaming** (Media Streams websocket over Channels;
-backend, codecs, VAD session, tests and docs complete; live smoke test gated on
-a provisioned Twilio number)
+**Phase 12 — Multi-Tenant Platform + CMS Publishing** (complete, committed at
+`5df17cf`): organizations with role-scoped platform admins, admin console
+(organizations, users, agents, phone numbers, knowledge, services, analytics),
+full CMS with draft → preview → publish, version history, restore-as-draft,
+site/SEO settings and an activity audit trail (292 backend tests).
+
+**Phase 13 — Production Infrastructure & SaaS Readiness** (current): deployable
+Docker stack, production settings, Redis + Celery, Daphne/ASGI, nginx/TLS,
+readiness checks, structured logging, deployment checklist and documentation.
 
 (Milestones behind us: Phase 8 multi-channel website + API foundation, Phase 10
-production telephony, and Phase 11 real-time voice streaming. The shared
-conversation engine, deployment management, public chat API and widget ship
-with every channel.)
+production telephony, Phase 11 real-time voice streaming, Phase 12 multi-tenant
+platform + CMS publishing workflow.)
 
 ## CURRENT OBJECTIVE
 
-Delivered: production-grade phone numbers (provider, country, capabilities,
-inbound/outbound flags), agent voice configuration (greeting, after-hours
-behavior, recording, max duration, transfer), outbound calling, human transfer,
-Telnyx support, connection status UX, real-time Media Streams audio with
-μ-law codecs, VAD endpointing, barge-in and heartbeat — and **241 passing
-tests**. Remaining for the website channel (Phase 9): rate limiting, widget
-branding, deployment UI, analytics.
+Phase 13 converts the platform from a working app into a deployable, reliable
+system without redesigning existing business logic. Django/DRF stays the single
+backend; multi-tenant isolation, widget, CMS, RAG, appointments, voice and
+telephony are preserved. Delivery ships in **backend/docs/production-deployment.md**
+and **backend/docs/disaster-recovery.md**.
+
+### Phase 13 — Production architecture
+
+```text
+                    Internet
+                       │
+                     HTTPS
+                       ▼
+                    Nginx
+                       │
+          ┌────────────┴────────────┐
+          ▼                         ▼
+    React/Vite (SPA)            Daphne (Django + DRF + Channels)
+                                   │
+                    ┌──────────────┼──────────────┐
+                    ▼              ▼              ▼
+               PostgreSQL       Redis         Celery worker
+                                   │
+                             Channels + cache
+
+    AI / RAG / Telephony remain application responsibilities
+```
+
+### Phase 13 — deployment prerequisites
+
+- `DJANGO_ENV=development|production`; production refuses insecure startup
+  (DEBUG on, default secret key, missing `DATABASE_URL`, HTTP `PUBLIC_BASE_URL`).
+- Base URL / telephony: `PUBLIC_BASE_URL` drives every webhook/media URL
+  (Twilio inbound/status/gather, Telnyx, `wss://…` streams); must be HTTPS in
+  production. Twilio/Telnyx webhook signature validation stays mandatory.
+- Production environment variables (see `.env.production.example`):
+  `DJANGO_SECRET_KEY`, `JWT_SECRET_KEY`, `DATABASE_URL`, `POSTGRES_*`,
+  `REDIS_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, `DOMAIN`,
+  `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `TWILIO_*`/`TELNYX_*`,
+  `LLM_*`/`STT_*`/`TTS_*`/`EMBEDDING_*`.
+- Docker services: `nginx` (TLS + SPA + static/media), `web` (Daphne ASGI),
+  `worker` (Celery), `postgres` (persistent volume), `redis` (persistent
+  volume). Only nginx exposes ports; secrets only come from `.env.production`.
+- HTTPS: certbot certs mounted into nginx; every other service is internal.
+- Redis: optional in development (in-memory fallbacks), powers Channels layer +
+  Django cache (DRF throttling) + Celery broker in production.
+- Celery: JSON wire format, `config.celery` app, autodiscovery, infrastructure
+  health tasks (`core.ping`, `core.health_check`). Critical agent behavior is
+  deliberately NOT moved into the worker yet.
+- Daphne: `daphne -b 0.0.0.0 -p 8000 config.asgi:application` serves HTTP +
+  the `/telephony/twilio/media` websocket; WSGI is untouched.
+- Health/readiness: `/health`, `/db-health`, `/ready` (database always, Redis
+  when configured). `python manage.py deployment_check --strict` gates releases.
+- Structured logging: JSON lines with `request_id` (echoed as `X-Request-ID`),
+  secret redaction filters, `DJANGO_LOG_LEVEL` control; never log JWTs, API
+  keys, or auth tokens.
+- Security posture: `SECURE_*` flags, secure cookies, HSTS, `X-Frame-Options
+  DENY`, nosniff, CSRF trusted origins, proxy header handling, production-safe
+  JSON error responses without stack traces.
+- Readiness checklist:
+  1. `docker compose -f docker-compose.production.yml up -d --build`
+  2. `curl -f https://DOMAIN/ready` → `{"status":"ok",...}`
+  3. widget + `/public/config/<id>` load; WebSocket route resolves
+  4. `deployment_check --strict` green in CI and pre-release
 
 ### Multi-channel architecture
 

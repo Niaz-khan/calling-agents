@@ -1,0 +1,153 @@
+# Production nginx configuration for AI Call Agent.
+#
+# Rendered by the nginx-alpine entrypoint: ${DOMAIN} and ${PUBLIC_BASE_URL}
+# are substituted from the container environment (env_file in compose).
+#
+# Routing model:
+#   /static/, /media/  -> Django files from shared volumes (no proxying)
+#   /telephony/*       -> Daphne, with long timeouts for the live media
+#                         stream websocket (Twilio <Connect><Stream>)
+#   /* API prefixes    -> Daphne (Django + Channels on web:8000): /auth,
+#                         /agents, /public, /widget.js, /health, ...
+#   everything else    -> React SPA (index.html). The admin app is hash-routed
+#                         (/#/admin/...), so those paths are never requested
+#                         from the server.
+#
+# For a TLS-free staging trial, comment out the 443 server and the 80->443
+# return, then uncomment the HTTP-only server at the bottom.
+
+# WebSocket-aware connection header.
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+upstream django {
+    server web:8000;
+}
+
+# HTTPS server (default production posture).
+server {
+    listen 80;
+    server_name ${DOMAIN};
+
+    location /.well-known/acme-challenge/ {
+        root /var/lib/letsencrypt-http;
+    }
+
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+
+    # ---- Security headers ------------------------------------------------
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header Permissions-Policy "geolocation=(), microphone=()" always;
+
+    client_max_body_size 20m;
+
+    # ---- Django static + media ---------------------------------------------
+    location ^~ /static/ {
+        alias /usr/share/nginx/staticfiles/;
+        expires 30d;
+        access_log off;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location ^~ /media/ {
+        alias /usr/share/nginx/mediafiles/;
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+
+    # ---- Telephony websockets + webhooks ------------------------------------
+    # The Twilio Media Streams websocket stays open for the whole call; voice
+    # idle timeouts are enforced by the application, so keep the proxy
+    # timeouts generous here and let Channels decide when a stream is done.
+    location ^~ /telephony/ {
+        proxy_pass http://django;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        proxy_read_timeout  3600s;
+        proxy_send_timeout  3600s;
+        proxy_buffering     off;
+    }
+
+    # ---- Django API (HTTP only) ---------------------------------------------
+    location ~ ^/(auth|agents|deployments|services|business-config|calls|customers|appointments|phone-numbers|knowledge|analytics|public|platform|django-admin|admin)(/|$) {
+        proxy_pass http://django;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout  65s;
+        proxy_send_timeout  65s;
+    }
+
+    # Single-segment Django endpoints (health probes + widget client).
+    location = /health { proxy_pass http://django; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
+    location = /db-health { proxy_pass http://django; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
+    location = /ready { proxy_pass http://django; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
+    location = /widget.js { proxy_pass http://django; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; proxy_read_timeout 30s; }
+    location = /widget { proxy_pass http://django; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
+
+    # ---- React SPA ------------------------------------------------------------
+    location / {
+        index index.html;
+        try_files $uri $uri/ /index.html;
+    }
+}
+
+# --- HTTPS-free staging option ----------------------------------------------
+# Replace the two TLS servers above with this block for a local/trial deploy.
+# server {
+#     listen 80;
+#     server_name ${DOMAIN};
+#     client_max_body_size 20m;
+#     location ^~ /static/ { alias /usr/share/nginx/staticfiles/; expires 30d; access_log off; }
+#     location ^~ /media/  { alias /usr/share/nginx/mediafiles/; expires 7d; }
+#     location ^~ /telephony/ {
+#         proxy_pass http://django;
+#         proxy_http_version 1.1;
+#         proxy_set_header Host $host;
+#         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+#         proxy_set_header X-Forwarded-Proto $scheme;
+#         proxy_set_header Upgrade $http_upgrade;
+#         proxy_set_header Connection $connection_upgrade;
+#         proxy_read_timeout 3600s;
+#         proxy_buffering off;
+#     }
+#     location ~ ^/(auth|agents|deployments|services|business-config|calls|customers|appointments|phone-numbers|knowledge|analytics|public|platform|django-admin|admin)(/|$) {
+#         proxy_pass http://django;
+#         proxy_http_version 1.1;
+#         proxy_set_header Host $host;
+#         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+#         proxy_set_header X-Forwarded-Proto $scheme;
+#     }
+#     location = /health { proxy_pass http://django; }
+#     location = /db-health { proxy_pass http://django; }
+#     location = /ready { proxy_pass http://django; }
+#     location = /widget.js { proxy_pass http://django; }
+#     location / { try_files $uri $uri/ /index.html; }
+# }

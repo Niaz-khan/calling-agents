@@ -4,11 +4,18 @@ import datetime
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv(BASE_DIR / ".env")
+
+# Declare the Celery app so `celery worker/app` and task autodiscovery resolve
+# even before Django fully initializes the app registry.
+from .celery import app as celery_app  # noqa: E402
+
+__all__ = ["celery_app"]
 
 
 def env(key, default=None):
@@ -20,6 +27,51 @@ def env_list(key, default=None):
     if value is None:
         return default
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def env_int(key, default=0):
+    try:
+        return int(env(key, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def env_bool(key, default=False):
+    return env(key, "1" if default else "0") == "1"
+
+
+def django_cache_config(redis_url):
+    """Resolve the default Django cache backend from an optional Redis URL.
+
+    Redis (production) uses Django's built-in RedisCache; otherwise a local
+    in-memory cache keeps development and tests dependency-free.
+    """
+    if redis_url:
+        return {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": redis_url,
+            "KEY_PREFIX": "ai_call_agent",
+        }
+    return {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "ai_call_agent",
+    }
+
+
+def channel_layers_config(redis_url):
+    """Resolve Channels layer: Redis when configured, in-memory otherwise."""
+    if redis_url:
+        return {
+            "default": {
+                "BACKEND": "channels_redis.core.RedisChannelLayer",
+                "CONFIG": {"hosts": [redis_url]},
+            }
+        }
+    return {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        }
+    }
 
 
 def parse_database_url(url):
@@ -46,11 +98,15 @@ def parse_database_url(url):
     }
 
 
+ENVIRONMENT = env("DJANGO_ENV", "development")
+
 SECRET_KEY = env("DJANGO_SECRET_KEY", env("JWT_SECRET_KEY", "insecure-dev-key"))
-DEBUG = env("DJANGO_DEBUG", "1") == "1"
+DEBUG = env("DJANGO_DEBUG", "0" if ENVIRONMENT == "production" else "1") == "1"
 ALLOWED_HOSTS = env_list(
     "DJANGO_ALLOWED_HOSTS", ["localhost", "127.0.0.1", "0.0.0.0", "[::1]"]
 )
+CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", [])
+INTERNAL_IPS = env_list("DJANGO_INTERNAL_IPS", ["127.0.0.1"])
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -80,6 +136,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "apps.core.middleware.RequestIDMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -88,6 +145,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "apps.core.middleware.JsonExceptionMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -110,23 +168,32 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
-# Channels keeps in-memory layers for a single process. Production runs a
-# single daphne worker per host; when horizontal scaling arrives, switch to
-# channels-redis (already declared in requirements.txt).
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer",
-    },
-}
+# ---------------------------------------------------------------------------
+# Redis + Channels
+# ---------------------------------------------------------------------------
+# Redis is optional in development (no external dependency for normal HTTP).
+# When REDIS_URL is set (production) it powers the Channels layer and the
+# default Django cache, which DRF throttling uses. Keep in-process layers
+# otherwise so local development works without Redis running.
+REDIS_URL = (env("REDIS_URL", "") or "").rstrip("/") or None
 
-DATABASES = {
-    "default": parse_database_url(
-        env(
-            "DATABASE_URL",
-            "postgresql://callagent:callagent@localhost:5432/callagent",
-        )
-    ),
-}
+CHANNEL_LAYERS = channel_layers_config(REDIS_URL)
+
+CACHES = {"default": django_cache_config(REDIS_URL)}
+
+# ---------------------------------------------------------------------------
+# Database
+# ---------------------------------------------------------------------------
+_database_default = "postgresql://callagent:callagent@localhost:5432/callagent"
+DATABASES = {"default": parse_database_url(env("DATABASE_URL", _database_default))}
+DATABASES["default"].update(
+    {
+        # Reuse connections in production; health-checks clear stale sockets.
+        "CONN_MAX_AGE": env_int("DB_CONN_MAX_AGE", 60 if ENVIRONMENT == "production" else 0),
+        "CONN_HEALTH_CHECKS": env_bool("DB_CONN_HEALTH_CHECKS", True),
+        "OPTIONS": {"connect_timeout": env_int("DB_CONNECT_TIMEOUT", 10)},
+    }
+)
 
 AUTH_USER_MODEL = "accounts.User"
 
@@ -151,10 +218,103 @@ TIME_ZONE = env("DJANGO_TIME_ZONE", "UTC")
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = "static/"
+STATIC_URL = env("DJANGO_STATIC_URL", "static/")
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+MEDIA_URL = env("DJANGO_MEDIA_URL", "/media/")
+MEDIA_ROOT = BASE_DIR / "media"
+
+# Upload limits (knowledge documents, logos) — reasonable, not unbounded.
+DATA_UPLOAD_MAX_MEMORY_SIZE = env_int("DATA_UPLOAD_MAX_MEMORY_SIZE", 5 * 1024 * 1024)
+FILE_UPLOAD_MAX_MEMORY_SIZE = env_int("FILE_UPLOAD_MAX_MEMORY_SIZE", 5 * 1024 * 1024)
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# ---------------------------------------------------------------------------
+# Production security
+# ---------------------------------------------------------------------------
+# Nginx terminates TLS and forwards X-Forwarded-Proto in production; honour it
+# only when the proxy header is actually present.
+SECURE_PROXY_SSL_HEADER = None
+if env_bool("DJANGO_BEHIND_PROXY", ENVIRONMENT == "production"):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", ENVIRONMENT == "production")
+SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", ENVIRONMENT == "production")
+CSRF_COOKIE_SECURE = env_bool("DJANGO_CSRF_COOKIE_SECURE", ENVIRONMENT == "production")
+SECURE_HSTS_SECONDS = env_int(
+    "DJANGO_SECURE_HSTS_SECONDS", 31536000 if ENVIRONMENT == "production" else 0
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
+    "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS", ENVIRONMENT == "production"
+)
+SECURE_HSTS_PRELOAD = env_bool("DJANGO_SECURE_HSTS_PRELOAD", False)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = env("DJANGO_X_FRAME_OPTIONS", "DENY")
+
+# Production environment guard: fail fast instead of running insecure.
+if ENVIRONMENT == "production":
+    problems = []
+    if DEBUG:
+        problems.append("DJANGO_DEBUG must be 0 in production")
+    if not env("DJANGO_SECRET_KEY") or SECRET_KEY == "insecure-dev-key":
+        problems.append("DJANGO_SECRET_KEY must be set to a unique strong value")
+    if not env("DATABASE_URL"):
+        problems.append("DATABASE_URL must be set in production")
+    if problems:
+        raise ImproperlyConfigured("; ".join(problems))
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
+LOG_LEVEL = env("DJANGO_LOG_LEVEL", "INFO")
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {
+        "request_id": {"()": "apps.core.logging_filters.RequestIDFilter"},
+        "redact": {"()": "apps.core.logging_filters.RedactSecretsFilter"},
+    },
+    "formatters": {
+        "json": {"()": "apps.core.logging_formatters.StructuredJsonFormatter"},
+        "console": {
+            "format": "%(asctime)s [%(levelname)s] [%(request_id)s] %(name)s: %(message)s"
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "filters": ["request_id", "redact"],
+            "formatter": "json" if ENVIRONMENT == "production" else "console",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": LOG_LEVEL,
+    },
+    "loggers": {
+        "django.request": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        "django.security": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        "apps": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+    },
+}
+
+# ---------------------------------------------------------------------------
+# Celery
+# ---------------------------------------------------------------------------
+# Infrastructure pre-requisite for background jobs (summaries, analytics,
+# document processing, notifications, usage metering). HTTP functionality does
+# not depend on a running worker.
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", REDIS_URL or "")
+CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", CELERY_BROKER_URL or "")
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_SOFT_TIME_LIMIT = env_int("CELERY_TASK_SOFT_TIME_LIMIT", 300)
+CELERY_TASK_TIME_LIMIT = env_int("CELERY_TASK_TIME_LIMIT", 600)
 
 # ---------------------------------------------------------------------------
 # CORS
@@ -251,3 +411,7 @@ EMBEDDING_API_KEY = env("EMBEDDING_API_KEY", "")
 EMBEDDING_BASE_URL = env("EMBEDDING_BASE_URL", "") or None
 KNOWLEDGE_SEARCH_LIMIT = int(env("KNOWLEDGE_SEARCH_LIMIT", "5"))
 KNOWLEDGE_RELEVANCE_THRESHOLD = float(env("KNOWLEDGE_RELEVANCE_THRESHOLD", "0.30"))
+
+# Late production sanity checks (values above are defined by this point).
+if ENVIRONMENT == "production" and not PUBLIC_BASE_URL.startswith("https://"):
+    raise ImproperlyConfigured("PUBLIC_BASE_URL must be HTTPS in production")
