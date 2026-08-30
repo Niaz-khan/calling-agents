@@ -47,7 +47,10 @@ def build_conversation_history(conversation):
                         "content": (payload.get("content") or None)
                         if payload
                         else None,
-                        "tool_calls": tool_calls,
+                        "tool_calls": [
+                            {**tc, "type": tc.get("type") or "function"}
+                            for tc in tool_calls
+                        ],
                     }
                 )
             else:

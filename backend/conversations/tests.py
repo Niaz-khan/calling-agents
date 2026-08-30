@@ -267,6 +267,31 @@ class TestSendMessage:
         assert system_notes
         assert sent[-1] == {"role": "user", "content": "I need help"}
 
+    def test_history_normalizes_assistant_tool_call_type(self, tenant):
+        _, org, _ = tenant
+        agent = _agent(org)
+        conversation = _conv(org, agent)
+
+        stored = {
+            "content": None,
+            "tool_calls": [
+                {"id": "call_1", "function": {"name": "x", "arguments": "{}"}}
+            ],
+        }
+        ConversationMessage.objects.create(
+            conversation=conversation,
+            role=ConversationMessage.Role.ASSISTANT,
+            content=json.dumps(stored),
+        )
+
+        from conversations.services import build_conversation_history
+
+        history = build_conversation_history(conversation)
+        assistant_msgs = [m for m in history if m["role"] == "assistant"]
+        assert assistant_msgs
+        assert assistant_msgs[0]["tool_calls"][0]["id"] == "call_1"
+        assert assistant_msgs[0]["tool_calls"][0]["type"] == "function"
+
     def test_message_rejected_when_call_closed(self, tenant, monkeypatch):
         _, org, client = tenant
         agent = _agent(org)

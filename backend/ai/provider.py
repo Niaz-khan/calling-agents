@@ -57,6 +57,7 @@ def generate_response(messages, tools=None):
         "tool_calls": [
             {
                 "id": tool_call.id,
+                "type": "function",
                 "function": {
                     "name": tool_call.function.name,
                     "arguments": tool_call.function.arguments,
