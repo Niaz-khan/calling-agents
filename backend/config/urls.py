@@ -6,5 +6,7 @@ urlpatterns = [
     path("auth/", include("accounts.urls")),
     path("", include("agents.urls")),
     path("", include("crm.urls")),
+    path("", include("telephony.urls")),
+    path("", include("conversations.urls")),
     path("", include("core.urls")),
 ]
