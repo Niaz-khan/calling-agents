@@ -1,8 +1,12 @@
+import asyncio
 import base64
 import hashlib
 import hmac
+import json
+import time
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from django.test import override_settings
 
@@ -459,10 +463,176 @@ def test_gather_webhook_unknown_call_hangs_up(api_client):
 def test_telephony_provider_factory_requires_credentials():
     from .providers.factory import get_telephony_provider
 
-    with override_settings(TWILIO_ACCOUNT_SID="", TWILIO_AUTH_TOKEN=""):
+    with override_settings(TWILIO_ACCOUNT_SID="", TWILIO_AUTH_TOKEN="", TELEPHONY_PROVIDER="twilio"):
         try:
             get_telephony_provider()
         except ValueError:
             pass
         else:
             raise AssertionError("expected ValueError for missing Twilio credentials")
+
+
+def test_telnyx_ed25519_signature_validation():
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from .providers.telnyx import validate_telnyx_signature
+
+    private_key = Ed25519PrivateKey.generate()
+    public_key = base64.b64encode(
+        private_key.public_key().public_bytes(
+            serialization.Encoding.Raw,
+            serialization.PublicFormat.Raw,
+        )
+    ).decode()
+
+    raw_body = b'{"data": {"event_type": "call.initiated"}}'
+    timestamp = str(int(time.time()))
+    signature = base64.b64encode(
+        private_key.sign(f"{timestamp}|".encode() + raw_body)
+    ).decode()
+
+    other_pub = base64.b64encode(b"0" * 32).decode()
+
+    assert validate_telnyx_signature(raw_body, signature, timestamp, public_key)
+    assert not validate_telnyx_signature(raw_body + b"x", signature, timestamp, public_key)
+    assert not validate_telnyx_signature(raw_body, signature, timestamp, other_pub)
+    assert not validate_telnyx_signature(raw_body, "bm90LWEtc2ln", timestamp, public_key)
+    assert not validate_telnyx_signature(raw_body, signature, "notanint", public_key)
+    assert not validate_telnyx_signature(raw_body, signature, str(int(time.time()) - 3600), public_key)
+    assert not validate_telnyx_signature(raw_body, None, timestamp, public_key)
+    assert not validate_telnyx_signature(raw_body, signature, None, public_key)
+    assert not validate_telnyx_signature(raw_body, signature, timestamp, "")
+
+
+def test_telnyx_event_to_status():
+    from .providers.telnyx import telnyx_event_to_status
+
+    assert telnyx_event_to_status("call.initiated") == "ringing"
+    assert telnyx_event_to_status("call.answered") == "in-progress"
+    assert telnyx_event_to_status("call.hangup") == "completed"
+    assert telnyx_event_to_status("call.machine.detection.ended") is None
+    assert telnyx_event_to_status("") is None
+    assert telnyx_event_to_status(None) is None
+
+
+def test_telnyx_provider_create_call():
+    from .providers.telnyx import TelnyxProvider
+
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={"data": {"call_control_id": "CC123", "record_type": "call"}},
+        )
+
+    provider = TelnyxProvider(
+        api_key="k",
+        connection_id="conn",
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    assert asyncio.run(provider.create_call("+15125550000", "+15550001111")) == "CC123"
+
+    (req,) = requests
+    assert req.method == "POST"
+    assert req.url.path == "/v2/calls"
+    assert req.headers["Authorization"] == "Bearer k"
+    assert json.loads(req.content) == {
+        "from": "+15125550000",
+        "to": "+15550001111",
+        "connection_id": "conn",
+    }
+
+
+def test_telnyx_provider_create_call_requires_connection(api_client):
+    from .providers.telnyx import TelnyxProvider
+
+    provider = TelnyxProvider(api_key="k", connection_id=None)
+    try:
+        asyncio.run(provider.create_call("+15125550000", "+15550001111"))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError for missing connection_id")
+
+
+def test_telnyx_provider_call_control_commands():
+    from .providers.telnyx import TelnyxProvider
+
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={"data": {"record_type": "call_control"}})
+
+    provider = TelnyxProvider(
+        api_key="k",
+        connection_id="conn",
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    asyncio.run(provider.end_call("CC123"))
+    asyncio.run(provider.transfer_call("CC123", "+15550009999"))
+
+    assert [r.url.path for r in requests] == [
+        "/v2/calls/CC123/actions/hangup",
+        "/v2/calls/CC123/actions/transfer",
+    ]
+    assert requests[1].content == b'{"to":"+15550009999"}'
+
+
+def test_telnyx_provider_get_call():
+    from .providers.telnyx import TelnyxProvider
+
+    def handler(request):
+        assert request.method == "GET"
+        assert request.url.path == "/v2/calls/CC123"
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "from": "+15125550000",
+                    "to": "+15550001111",
+                    "state": "active",
+                    "record_type": "call",
+                }
+            },
+        )
+
+    provider = TelnyxProvider(
+        api_key="k",
+        connection_id="conn",
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    call = asyncio.run(provider.get_call("CC123"))
+    assert call.provider_call_id == "CC123"
+    assert call.from_number == "+15125550000"
+    assert call.to_number == "+15550001111"
+    assert call.status == "active"
+
+
+def test_telephony_provider_factory_telnyx():
+    from .providers.factory import get_telephony_provider
+    from .providers.telnyx import TelnyxProvider
+
+    with override_settings(
+        TELEPHONY_PROVIDER="telnyx",
+        TELNYX_API_KEY="k",
+        TELNYX_CONNECTION_ID="conn",
+    ):
+        provider = get_telephony_provider()
+
+    assert isinstance(provider, TelnyxProvider)
+    assert provider._api_key == "k"
+
+    with override_settings(TELEPHONY_PROVIDER="telnyx", TELNYX_API_KEY=""):
+        try:
+            get_telephony_provider()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError for missing Telnyx API key")
