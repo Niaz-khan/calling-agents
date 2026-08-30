@@ -163,9 +163,11 @@ class TestDeployments:
         data = created.json()
         assert data["organization_id"] == org.id
         assert data["agent_id"] == agent["id"]
+        assert data["agent_name"] == "Receptionist"
         assert data["public_identifier"].startswith("pub_")
         assert data["enabled"] is True
         assert data["allowed_domains"] == ["acme.com", "www.acme.com"]
+        assert "system_prompt" not in data
 
         listing = client.get(f"/deployments?agent_id={agent['id']}")
         assert listing.status_code == 200

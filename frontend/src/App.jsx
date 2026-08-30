@@ -8,6 +8,8 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Agents from './pages/Agents'
+import Deployments from './pages/Deployments'
+import DeploymentDetail from './pages/DeploymentDetail'
 import Calls from './pages/Calls'
 import CallDetail from './pages/CallDetail'
 import Customers from './pages/Customers'
@@ -74,6 +76,8 @@ export default function App() {
             <Route element={<Protected />}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/agents" element={<Agents />} />
+              <Route path="/deployments" element={<Deployments />} />
+              <Route path="/deployments/:id" element={<DeploymentDetail />} />
               <Route path="/calls" element={<Calls />} />
               <Route path="/calls/:callId" element={<CallDetail />} />
               <Route path="/customers" element={<Customers />} />

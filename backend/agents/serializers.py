@@ -33,6 +33,7 @@ class AgentSerializer(serializers.ModelSerializer):
 class AgentDeploymentSerializer(serializers.ModelSerializer):
     organization_id = serializers.IntegerField(read_only=True)
     agent_id = serializers.IntegerField()
+    agent_name = serializers.CharField(source="agent.name", read_only=True)
     public_identifier = serializers.CharField(read_only=True)
     channel = serializers.ChoiceField(choices=AgentDeployment.Channel.choices)
     allowed_domains = serializers.ListField(
@@ -61,6 +62,7 @@ class AgentDeploymentSerializer(serializers.ModelSerializer):
             "id",
             "organization_id",
             "agent_id",
+            "agent_name",
             "channel",
             "name",
             "enabled",
