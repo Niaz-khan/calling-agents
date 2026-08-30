@@ -15,6 +15,10 @@ psycopg[binary]==3.3.4
 # Configuration
 python-dotenv==1.2.3
 
+# AI layer (LLM + embeddings)
+openai==3.6.0
+pypdf==6.16.2
+
 # Password hashing (verifies legacy argon2id hashes)
 argon2-cffi==25.1.0
 
