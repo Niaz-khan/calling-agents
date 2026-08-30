@@ -62,19 +62,19 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "corsheaders",
-    "accounts",
-    "tenancy",
-    "agents",
-    "crm",
-    "conversations",
-    "appointments",
-    "services",
-    "knowledge",
-    "telephony",
-    "voice",
-    "analytics",
-    "ai",
-    "core",
+    "apps.accounts",
+    "apps.tenancy",
+    "apps.agents",
+    "apps.crm",
+    "apps.conversations",
+    "apps.appointments",
+    "apps.services",
+    "apps.knowledge",
+    "apps.telephony",
+    "apps.voice",
+    "apps.analytics",
+    "apps.ai",
+    "apps.core",
 ]
 
 MIDDLEWARE = [
@@ -106,6 +106,16 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "config.wsgi.application"
+ASGI_APPLICATION = "config.asgi.application"
+
+# Channels keeps in-memory layers for a single process. Production runs a
+# single daphne worker per host; when horizontal scaling arrives, switch to
+# channels-redis (already declared in requirements.txt).
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    },
+}
 
 DATABASES = {
     "default": parse_database_url(
@@ -211,6 +221,14 @@ TTS_BASE_URL = env("TTS_BASE_URL", "") or None
 VOICE_MAX_UTTERANCE_SECONDS = int(env("VOICE_MAX_UTTERANCE_SECONDS", "30"))
 VOICE_HEARTBEAT_SECONDS = int(env("VOICE_HEARTBEAT_SECONDS", "20"))
 VOICE_IDLE_TIMEOUT_SECONDS = int(env("VOICE_IDLE_TIMEOUT_SECONDS", "300"))
+
+# Real-time media streaming (Twilio Media Streams). When disabled (default),
+# the TwiML/Gather loop remains the live voice path.
+VOICE_STREAMING_ENABLED = env("VOICE_STREAMING_ENABLED", "0") == "1"
+# RMS energy (0..32767) above which a 20ms frame counts as speech.
+VOICE_STREAM_SPEECH_THRESHOLD = int(env("VOICE_STREAM_SPEECH_THRESHOLD", "1000"))
+# Trailing silence (seconds) before an utterance is committed to STT.
+VOICE_STREAM_END_SILENCE_SECONDS = float(env("VOICE_STREAM_END_SILENCE_SECONDS", "0.6"))
 
 TELEPHONY_PROVIDER = env("TELEPHONY_PROVIDER", "twilio")
 TWILIO_ACCOUNT_SID = env("TWILIO_ACCOUNT_SID", "")

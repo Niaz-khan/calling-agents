@@ -1272,15 +1272,15 @@ Conversion rate
 * [x] Call lifecycle (status callback, provider status normalization)
 * [x] Speech-to-text (OpenAI-compatible; Groq whisper in staging)
 * [x] Text-to-speech (Edge neural voices free provider; OpenAI-compatible also supported)
-* [ ] Audio streaming (Twilio Media Streams websocket; Gather-based loop is live)
+* [x] Audio streaming (Twilio Media Streams websocket; Gather-based loop is still the fallback)
 * [x] Real-time conversation (TwiML speech-gather loop over the text agent)
-* [ ] Call recording/transcription (transcript is persisted; provider recording not yet saved)
+* [x] Call recording/transcription (transcript is persisted; provider recording saved on request only)
 
 Staging uses a TwiML `<Gather input="speech">` conversational loop — Twilio
 collects each caller utterance and posts it to `/telephony/webhook/gather`,
-which runs the agent and answers with TwiML that speaks the reply. No
-websocket infrastructure is required. Audio streaming (Media Streams) remains
-incremental.
+which runs the agent and answers with TwiML that speaks the reply. The
+Gather loop remains the default path; Phase 11 added the low-latency Media
+Streams websocket path behind `VOICE_STREAMING_ENABLED=1`.
 
 ## Phase 5 — Dashboard
 
@@ -1374,28 +1374,73 @@ Production-grade phone infrastructure on top of the Phase 4 foundation-plus:
 * [x] Tests: **207 passing** including after-hours, transfer auth, outbound,
       recording, max-duration, Telnyx signature/inbound/status, connection status
 
-Audio streaming (Media Streams websocket) and KYC/verification remain future
-work. Live Twilio/Telnyx smoke tests are still gated on a provisioned number.
+Audio streaming (Media Streams websocket) shipped in Phase 11; KYC/verification
+remain future work. Live Twilio/Telnyx smoke tests are still gated on a
+provisioned number.
+
+---
+
+## Phase 11 — Real-Time Voice Streaming (completed milestone)
+
+Low-latency bidirectional audio over the Twilio Media Streams websocket,
+reusing the shared `VoiceSessionEngine` + agent/STT/TTS stack:
+
+* [x] `TwilioMediaStreamConsumer` at `/telephony/twilio/media` — per-call token
+      auth, callSid cross-check, one active stream per call, heartbeat marks,
+      DTMF passthrough (`handle_text`), stop/cleanup lifecycle
+* [x] G.711 codecs — `apps/voice/codec.py`: raw 8 kHz PCM ↔ μ-law/alaw, ffmpeg
+      WAV transcoding with in-process fallback encoding; silence byte 0xFF (μ-law) /
+      0xD5 (alaw); 20 ms frames, 100 ms playback chunks
+* [x] Streaming voice session — `UtteranceDetector` VAD (RMS energy +
+      adaptive threshold + pre-roll/speech-buffer), `StreamingVoiceSession` with
+      barge-in (clear + skip stale replies), max-utterance watchdog, idle
+      timeout, human transfer relay, structured tool/end events
+* [x] Serialization — clear/pause/end commands, structured tool results fed back
+      to the agent loop; turns persist through the shared message pipeline
+* [x] Guard rails — unknown tools rejected, backend validation authoritative,
+      no secrets in logs, close codes 4001/4403/4401, transfer requires
+      `Organization.transfer_phone_number`
+* [x] App restructure — all Django apps moved under `backend/apps/`, settings in
+      `backend/config/`; monkeypatch paths, AppConfig names and imports updated
+* [x] Tests — **234 passing**: codec round-trips (10), streaming detector/session
+      (11), consumer/websocket auth + happy path + heartbeat (6), plus the full
+      existing suite; `manage.py check` and `makemigrations --check` clean
+* [x] Docs — `.env.example` streaming variables, codec/ffmpeg notes, smoke-test
+      guide below
+
+### Streaming smoke test (requires a provisioned Twilio number)
+
+1. `pip install` ffmpeg (or set `TTS_PROVIDER=openai`/`TTS_FORMAT=pcm`).
+2. `VOICE_STREAMING_ENABLED=1` in `.env`.
+3. Run `python manage.py runserver` behind `daphne` (Channels) and a public
+   HTTPS tunnel; `PUBLIC_BASE_URL` must be reachable from the internet.
+4. Point the Twilio number's "A call comes in" webhook at `/telephony/webhook/inbound`
+   (voice settings) and enable Media Streams in the returned TwiML.
+5. Dial in — you should hear the greeting, speak, and get a low-latency
+   synthesized reply; call end persists the transcript and finalizes the call.
 
 ---
 
 ## CURRENT PHASE
 
-**Phase 10 — Production Telephony** (backend + dashboard complete; live smoke
-test gated on a provisioned Twilio number)
+**Phase 11 — Real-Time Voice Streaming** (Media Streams websocket over Channels;
+backend, codecs, VAD session, tests and docs complete; live smoke test gated on
+a provisioned Twilio number)
 
-(Milestones behind us: Phase 8 multi-channel website + API foundation and
-Phase 10 production telephony. The shared conversation engine, deployment
-management, public chat API and widget ship with every channel.)
+(Milestones behind us: Phase 8 multi-channel website + API foundation, Phase 10
+production telephony, and Phase 11 real-time voice streaming. The shared
+conversation engine, deployment management, public chat API and widget ship
+with every channel.)
 
 ## CURRENT OBJECTIVE
 
 Delivered: production-grade phone numbers (provider, country, capabilities,
 inbound/outbound flags), agent voice configuration (greeting, after-hours
 behavior, recording, max duration, transfer), outbound calling, human transfer,
-Telnyx support, connection status UX and 207 passing tests. Remaining for the
-website channel (Phase 9): rate limiting, widget branding, deployment UI,
-analytics.
+Telnyx support, connection status UX, real-time Media Streams audio with
+μ-law codecs, VAD endpointing, barge-in and heartbeat — and **234 passing
+tests**. Remaining for the website channel (Phase 9): rate limiting, widget
+branding, deployment UI, analytics.
 
 ### Multi-channel architecture
 
@@ -1845,10 +1890,10 @@ Production                          ░░░░░░░░░░░░░░�
 
 # 40. Immediate Next Action
 
-Phase 10 (production telephony) ships as a milestone with **207 passing tests**:
-outbound calling, human transfer, after-hours handling, agent voice
-configuration, Telnyx support and the connection status card. The website
-channel remains the open production funnel:
+Phase 11 (real-time voice streaming) ships as a milestone with **234 passing
+tests**: the Media Streams websocket consumer, G.711 codecs, VAD/endpointing,
+barge-in, heartbeat and transfer, plus the Phase 10 telephony foundation. The
+website channel remains the open production funnel:
 
 1. Harden the public surface: rate limiting/throttling, stricter origin
    validation, abuse protection on `/public/chat`.
@@ -1860,9 +1905,10 @@ channel remains the open production funnel:
    appointments booked).
 
 Telephony live verification remains gated on purchasing a Twilio number (the
-trial account cannot attach custom webhooks to calls). The Twilio and Telnyx
-providers, outbound calling, transfer and connection checks are implemented and
-tested with fakes; once a number exists they follow the go-live steps above.
+trial account cannot attach custom webhooks or Media Streams to calls). The
+Twilio and Telnyx providers, outbound calling, transfer, connection checks and
+the streaming consumer are implemented and tested with fakes; once a number
+exists they follow the go-live steps in the Phase 11 smoke-test guide.
 
 ````
 

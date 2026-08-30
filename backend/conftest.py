@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from tenancy.models import Organization, OrganizationMember
+from apps.tenancy.models import Organization, OrganizationMember
 
 User = get_user_model()
 
