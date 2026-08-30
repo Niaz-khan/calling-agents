@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Agent
+from .models import Agent, AgentDeployment
 
 
 class AgentSerializer(serializers.ModelSerializer):
@@ -24,3 +24,35 @@ class AgentSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "organization_id", "created_at", "updated_at"]
+
+
+class AgentDeploymentSerializer(serializers.ModelSerializer):
+    organization_id = serializers.IntegerField(read_only=True)
+    agent_id = serializers.IntegerField()
+    public_identifier = serializers.CharField(read_only=True)
+    channel = serializers.ChoiceField(choices=AgentDeployment.Channel.choices)
+    allowed_domains = serializers.ListField(
+        child=serializers.CharField(max_length=255), required=False
+    )
+
+    class Meta:
+        model = AgentDeployment
+        fields = [
+            "id",
+            "organization_id",
+            "agent_id",
+            "channel",
+            "name",
+            "enabled",
+            "public_identifier",
+            "allowed_domains",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "organization_id",
+            "public_identifier",
+            "created_at",
+            "updated_at",
+        ]

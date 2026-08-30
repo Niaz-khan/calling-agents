@@ -6,9 +6,10 @@ from django.db import models
 def generate_public_identifier() -> str:
     """Random, opaque public identifier for a deployment.
 
-    128 bits of entropy (22 url-safe characters).
+    128 bits of entropy (22 url-safe characters) behind a ``pub_`` prefix so
+    public endpoints are clearly distinguishable from private ids.
     """
-    return secrets.token_urlsafe(16)
+    return f"pub_{secrets.token_urlsafe(16)}"
 
 
 class Agent(models.Model):

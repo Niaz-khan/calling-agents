@@ -148,6 +148,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # ---------------------------------------------------------------------------
 
 CORS_ALLOW_CREDENTIALS = True
+# The public widget endpoints manage their own per-deployment CORS and
+# preflight handling; leave only private/organization routes to the middleware.
+CORS_URLS_REGEX = r"^/(?!public/).*$"
 CORS_ALLOWED_ORIGINS = env_list(
     "CORS_ORIGINS",
     [

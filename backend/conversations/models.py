@@ -74,6 +74,14 @@ class Conversation(models.Model):
         default=ConversationChannel.PHONE,
         db_index=True,
     )
+    visitor_id = models.CharField(
+        max_length=128,
+        blank=True,
+        null=True,
+        db_index=True,
+        help_text="Web/API visitor session id, so a returning visitor continues "
+        "the same open conversation.",
+    )
     status = models.CharField(
         max_length=16,
         choices=ConversationStatus.choices,
