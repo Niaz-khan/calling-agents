@@ -6,6 +6,11 @@ class UserManager(BaseUserManager):
 
     use_in_migrations = True
 
+    def normalize_email(self, email):
+        """Store emails fully lowercased for consistent matching."""
+        email = super().normalize_email(email)
+        return email.lower()
+
     def _create_user(self, email, password, **extra_fields):
         if not email:
             raise ValueError("Users must have an email address")

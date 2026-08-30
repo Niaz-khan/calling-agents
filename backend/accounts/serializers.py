@@ -17,6 +17,9 @@ class LoginSerializer(TokenObtainPairSerializer):
     """JWT login matching the legacy ``{access_token, token_type}`` contract."""
 
     def validate(self, attrs):
+        email = attrs.get(self.username_field)
+        if email:
+            attrs[self.username_field] = email.lower()
         try:
             data = super().validate(attrs)
         except AuthenticationFailed:

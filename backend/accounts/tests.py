@@ -91,6 +91,32 @@ def test_login_invalid_credentials_401(client):
     assert resp.json()["detail"] == "Invalid email or password"
 
 
+def test_email_login_and_registration_are_case_insensitive(client):
+    User.objects.create_user(email="CaseTest@Example.com", password="secret1")
+    resp = client.post(
+        "/auth/login",
+        {"email": "casetest@example.com", "password": "secret1"},
+        format="json",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["access_token"]
+
+    reg = client.post(
+        "/auth/register",
+        {"email": "NewUser@Example.com", "full_name": "New User", "password": "secret1"},
+        format="json",
+    )
+    assert reg.status_code == 201
+    assert reg.json()["email"] == "newuser@example.com"
+
+    dup = client.post(
+        "/auth/register",
+        {"email": "NEWUSER@example.com", "full_name": "Dup User", "password": "secret1"},
+        format="json",
+    )
+    assert dup.status_code == 409
+
+
 def test_me_requires_auth(client):
     assert client.get("/auth/me").status_code == 401
 
