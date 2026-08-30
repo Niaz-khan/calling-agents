@@ -1402,11 +1402,14 @@ reusing the shared `VoiceSessionEngine` + agent/STT/TTS stack:
       `Organization.transfer_phone_number`
 * [x] App restructure — all Django apps moved under `backend/apps/`, settings in
       `backend/config/`; monkeypatch paths, AppConfig names and imports updated
-* [x] Tests — **234 passing**: codec round-trips (10), streaming detector/session
-      (11), consumer/websocket auth + happy path + heartbeat (6), plus the full
-      existing suite; `manage.py check` and `makemigrations --check` clean
+* [x] Tests — **241 passing**: codec round-trips (10), streaming detector/session
+      (11), consumer/websocket auth + happy path + heartbeat + DTMF + A-law
+      negotiation + real shared-agent tool/turn persistence (9), Twilio webhook
+      stream-vs-gather gating + stream URL scheme (4), plus the full existing
+      suite; `manage.py check` and `makemigrations --check` clean
 * [x] Docs — `.env.example` streaming variables, codec/ffmpeg notes, smoke-test
-      guide below
+      guide below, and the production runtime guide in
+      `docs/voice-streaming-runtime.md`
 
 ### Streaming smoke test (requires a provisioned Twilio number)
 
@@ -1438,7 +1441,7 @@ Delivered: production-grade phone numbers (provider, country, capabilities,
 inbound/outbound flags), agent voice configuration (greeting, after-hours
 behavior, recording, max duration, transfer), outbound calling, human transfer,
 Telnyx support, connection status UX, real-time Media Streams audio with
-μ-law codecs, VAD endpointing, barge-in and heartbeat — and **234 passing
+μ-law codecs, VAD endpointing, barge-in and heartbeat — and **241 passing
 tests**. Remaining for the website channel (Phase 9): rate limiting, widget
 branding, deployment UI, analytics.
 
@@ -1890,7 +1893,7 @@ Production                          ░░░░░░░░░░░░░░�
 
 # 40. Immediate Next Action
 
-Phase 11 (real-time voice streaming) ships as a milestone with **234 passing
+Phase 11 (real-time voice streaming) ships as a milestone with **241 passing
 tests**: the Media Streams websocket consumer, G.711 codecs, VAD/endpointing,
 barge-in, heartbeat and transfer, plus the Phase 10 telephony foundation. The
 website channel remains the open production funnel:

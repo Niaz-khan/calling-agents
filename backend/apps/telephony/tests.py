@@ -348,6 +348,112 @@ def test_inbound_webhook_creates_conversation(tenant, api_client):
     assert conversation.customer.phone_number == "+15550001111"
 
 
+def test_inbound_webhook_returns_stream_when_enabled(tenant, api_client):
+    _, org, _ = tenant
+    agent = _make_agent(org)
+    _make_number(org, agent)
+
+    params = {"To": "+14441110000", "From": "+15550001111", "CallSid": "CAIN2"}
+    sig = _sign("http://testserver/telephony/webhook/inbound", params, TOKEN)
+
+    with override_settings(
+        TWILIO_AUTH_TOKEN=TOKEN,
+        VOICE_STREAMING_ENABLED=True,
+        PUBLIC_BASE_URL="https://abc123.eu.ngrok.io",
+    ):
+        resp = api_client.post(
+            "/telephony/webhook/inbound",
+            params,
+            format="multipart",
+            HTTP_X_TWILIO_SIGNATURE=sig,
+        )
+
+    assert resp.status_code == 200
+    body = resp.content.decode()
+
+    conversation = Conversation.objects.get(phone_call__provider_call_id="CAIN2")
+    assert "<Connect><Stream" in body
+    assert "<Gather" not in body
+    expected_url = (
+        f"wss://abc123.eu.ngrok.io/telephony/twilio/media"
+        f"?token={conversation.phone_call.stream_token}"
+    )
+    assert expected_url in body
+
+
+def test_inbound_webhook_uses_gather_when_streaming_disabled(tenant, api_client):
+    _, org, _ = tenant
+    agent = _make_agent(org)
+    _make_number(org, agent)
+
+    params = {"To": "+14441110000", "From": "+15550001111", "CallSid": "CAIN3"}
+    sig = _sign("http://testserver/telephony/webhook/inbound", params, TOKEN)
+
+    with override_settings(TWILIO_AUTH_TOKEN=TOKEN, VOICE_STREAMING_ENABLED=False):
+        resp = api_client.post(
+            "/telephony/webhook/inbound",
+            params,
+            format="multipart",
+            HTTP_X_TWILIO_SIGNATURE=sig,
+        )
+
+    assert resp.status_code == 200
+    assert b'<Gather input="speech"' in resp.content
+    assert b"<Stream" not in resp.content
+
+
+def test_outbound_webhook_answers_with_stream_when_enabled(tenant, api_client):
+    _, org, _ = tenant
+    agent = _make_agent(org)
+    conversation = _make_conversation(org, agent, call_sid="CAOUT2")
+    conversation.phone_call.stream_token = "outbound-tok"
+    conversation.phone_call.save(update_fields=["stream_token"])
+
+    params = {"CallSid": "CAOUT2", "To": "+15550001111", "From": "+14441110000"}
+    sig = _sign("http://testserver/telephony/webhook/outbound", params, TOKEN)
+
+    with override_settings(
+        TWILIO_AUTH_TOKEN=TOKEN,
+        VOICE_STREAMING_ENABLED=True,
+        PUBLIC_BASE_URL="http://127.0.0.1:8000",
+    ):
+        resp = api_client.post(
+            "/telephony/webhook/outbound",
+            params,
+            format="multipart",
+            HTTP_X_TWILIO_SIGNATURE=sig,
+        )
+
+    assert resp.status_code == 200
+    body = resp.content.decode()
+    assert "<Connect><Stream" in body
+    assert (
+        "ws://127.0.0.1:8000/telephony/twilio/media?token=outbound-tok" in body
+    )
+
+
+def test_twilio_stream_url_scheme_and_token(tenant):
+    from .services import get_twilio_stream_url
+
+    _, org, _ = tenant
+    agent = _make_agent(org)
+    conversation = _make_conversation(org, agent, call_sid="CAURL1")
+    conversation.phone_call.stream_token = "tok-url-safe-123"
+    conversation.phone_call.save(update_fields=["stream_token"])
+
+    with override_settings(PUBLIC_BASE_URL="https://app.example.com"):
+        assert (
+            get_twilio_stream_url(conversation)
+            == "wss://app.example.com/telephony/twilio/media?token=tok-url-safe-123"
+        )
+
+    with override_settings(PUBLIC_BASE_URL="http://127.0.0.1:8000/"):
+        assert (
+            get_twilio_stream_url(conversation)
+            == "ws://127.0.0.1:8000/telephony/twilio/media?token=tok-url-safe-123"
+        )
+
+
 def test_status_webhook_completed(tenant, api_client, monkeypatch):
     _, org, _ = tenant
     agent = _make_agent(org)

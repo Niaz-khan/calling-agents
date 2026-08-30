@@ -47,8 +47,15 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
+  const platformRole = user?.platform_role || ''
+  const isPlatformUser = Boolean(
+    platformRole || user?.is_superuser
+  )
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider
+      value={{ user, loading, login, register, logout, platformRole, isPlatformUser }}
+    >
       {children}
     </AuthContext.Provider>
   )

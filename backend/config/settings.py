@@ -75,6 +75,8 @@ INSTALLED_APPS = [
     "apps.analytics",
     "apps.ai",
     "apps.core",
+    "apps.cms",
+    "apps.platform",
 ]
 
 MIDDLEWARE = [
@@ -183,6 +185,9 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "DEFAULT_THROTTLE_RATES": {
+        "public_cms": env("PUBLIC_CMS_RATE", "300/min"),
+    },
 }
 
 SIMPLE_JWT = {

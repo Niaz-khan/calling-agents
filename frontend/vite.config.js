@@ -16,6 +16,8 @@ const API_PREFIXES = [
   '/telephony',
   '/knowledge',
   '/analytics',
+  '/public',
+  '/platform',
 ]
 
 const proxy = Object.fromEntries(

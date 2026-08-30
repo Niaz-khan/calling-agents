@@ -48,7 +48,15 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["id", "email", "full_name", "default_organization", "organizations"]
+        fields = [
+            "id",
+            "email",
+            "full_name",
+            "platform_role",
+            "is_superuser",
+            "default_organization",
+            "organizations",
+        ]
 
     def get_organizations(self, obj):
         memberships = list(

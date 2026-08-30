@@ -40,3 +40,32 @@ def tenant():
 @pytest.fixture
 def stranger():
     return _tenant_scope("stranger@example.com", "Rival")
+
+
+def _platform_scope(email, role=None, superuser=False):
+    if superuser:
+        user = User.objects.create_superuser(email=email, password="password123")
+    else:
+        user = User.objects.create_user(email=email, password="password123")
+        if role:
+            user.set_platform_role(role)
+    client = JSONClient()
+    client.credentials(
+        HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(user).access_token}"
+    )
+    return user, client
+
+
+@pytest.fixture
+def superadmin():
+    return _platform_scope("super@example.com", superuser=True)
+
+
+@pytest.fixture
+def platformadmin():
+    return _platform_scope("plat@example.com", User.PlatformRole.PLATFORM_ADMIN)
+
+
+@pytest.fixture
+def contentadmin():
+    return _platform_scope("content@example.com", User.PlatformRole.CONTENT_ADMIN)

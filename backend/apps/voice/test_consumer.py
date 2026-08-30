@@ -14,12 +14,19 @@ from django.test import override_settings
 from apps.agents.models import Agent
 from apps.conversations.models import (
     Conversation,
+    ConversationMessage,
     PhoneCall,
     PhoneCallStatus,
 )
 
 from .base import STTResult, TTSResult
-from .codec import PCM_SAMPLE_RATE, encode_mulaw, wrap_wav
+from .codec import (
+    PCM_SAMPLE_RATE,
+    decode_alaw,
+    encode_alaw,
+    encode_mulaw,
+    wrap_wav,
+)
 from .consumers import _ACTIVE_STREAMS, TwilioMediaStreamConsumer
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -140,6 +147,24 @@ async def _conversation_state(conversation_id):
         return conversation.status, conversation.phone_call.provider_status
 
     return await database_sync_to_async(read)()
+
+
+async def _message_roles(conversation_id, min_count=4, timeout=5.0):
+    """Poll persisted conversation messages until ``min_count`` rows exist."""
+    deadline = asyncio.get_event_loop().time() + timeout
+    roles = []
+    while asyncio.get_event_loop().time() < deadline:
+        roles = await database_sync_to_async(
+            lambda: list(
+                ConversationMessage.objects.filter(conversation_id=conversation_id)
+                .order_by("id")
+                .values_list("role", flat=True)
+            )
+        )()
+        if len(roles) >= min_count:
+            return roles
+        await asyncio.sleep(0.05)
+    return roles or []
 
 
 async def _cleanup_db() -> None:
@@ -327,3 +352,153 @@ def test_consumer_heartbeat_marks(tenant, monkeypatch):
             return False
 
     assert asyncio.run(scenario()) is True
+
+
+def test_consumer_negotiates_alaw_and_streams_reply(tenant, monkeypatch):
+    _, org, _ = tenant
+    agent = _make_agent(org)
+    _stream_conversation(org, agent, "CA-AL", "tok-al")
+    turns = []
+    _patch_providers(monkeypatch, turns=turns)
+
+    async def scenario():
+        communicator = WebsocketCommunicator(
+            APPLICATION, "/telephony/twilio/media?token=tok-al"
+        )
+        connected, _ = await communicator.connect()
+        assert connected is True
+
+        await communicator.send_json_to(
+            _start_message("CA-AL", "MS-AL", encoding="audio/x-alaw")
+        )
+        greeting = await _read_media_frames(communicator, 1)
+        assert greeting, "expected greeting audio out"
+
+        utterance = encode_alaw(_pcm(9000, 0.2) + _pcm(0, 1.0))
+        await communicator.send_json_to(_media_message(utterance))
+
+        await _wait_until(lambda: bool(turns))
+        assert turns == ["book my appointment"]
+
+        reply_frames = await _read_media_frames(communicator, 1, timeout=4.0)
+        assert reply_frames, "expected reply audio out"
+        payload = base64.b64decode(reply_frames[0]["media"]["payload"])
+        assert decode_alaw(payload), "reply should be valid A-law audio"
+
+        await communicator.send_json_to({"event": "stop"})
+        await _wait_closed(communicator)
+        _ACTIVE_STREAMS.pop("CA-AL", None)
+        await _cleanup_db()
+
+    asyncio.run(scenario())
+
+
+def test_consumer_dtmf_triggers_turn(tenant, monkeypatch):
+    _, org, _ = tenant
+    agent = _make_agent(org)
+    _stream_conversation(org, agent, "CA-DT", "tok-dt")
+    turns = []
+    _patch_providers(monkeypatch, turns=turns)
+
+    async def scenario():
+        communicator = WebsocketCommunicator(
+            APPLICATION, "/telephony/twilio/media?token=tok-dt"
+        )
+        connected, _ = await communicator.connect()
+        assert connected is True
+
+        await communicator.send_json_to(_start_message("CA-DT", "MS-DT"))
+        greeting = await _read_media_frames(communicator, 1)
+        assert greeting, "expected greeting audio out"
+
+        await communicator.send_json_to({"event": "dtmf", "dtmf": {"digit": "1"}})
+
+        await _wait_until(lambda: "1" in turns)
+        assert "1" in turns
+
+        reply_frames = await _read_media_frames(communicator, 1, timeout=4.0)
+        assert reply_frames, "expected reply audio out"
+
+        await communicator.send_json_to({"event": "stop"})
+        await _wait_closed(communicator)
+        _ACTIVE_STREAMS.pop("CA-DT", None)
+        await _cleanup_db()
+
+    asyncio.run(scenario())
+
+
+def test_consumer_persists_messages_and_tool_results(tenant, monkeypatch):
+    """Exercise the shared agent path (run_agent_turn -> tools -> messages)."""
+    _, org, _ = tenant
+    agent = _make_agent(org)
+    conversation = _stream_conversation(org, agent, "CA-PT", "tok-pt")
+
+    calls = iter(
+        [
+            {
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "check_appointment_availability",
+                            "arguments": json.dumps(
+                                {
+                                    "start_time": "2026-08-31T15:00:00",
+                                    "end_time": "2026-08-31T15:30:00",
+                                }
+                            ),
+                        },
+                    }
+                ],
+            },
+            {"content": "3 PM is available tomorrow.", "tool_calls": []},
+        ]
+    )
+
+    def fake_provider(messages, tools=None):
+        return next(calls)
+
+    from apps.conversations.services import run_agent_turn as real_run_agent_turn
+
+    def run_and_close(conversation, agent, transcript):
+        try:
+            return real_run_agent_turn(conversation, agent, transcript)
+        finally:
+            from django.db import connections
+
+            connections.close_all()
+
+    monkeypatch.setattr("apps.ai.agent.generate_response", fake_provider)
+    monkeypatch.setattr("apps.voice.session.run_agent_turn", run_and_close)
+    monkeypatch.setattr("apps.voice.consumers.get_stt_provider", lambda: FakeSTT())
+    monkeypatch.setattr("apps.voice.consumers.get_tts_provider", lambda: FakeTTS())
+    monkeypatch.setattr("apps.telephony.services.finalize_call", lambda c: c)
+
+    async def scenario():
+        communicator = WebsocketCommunicator(
+            APPLICATION, "/telephony/twilio/media?token=tok-pt"
+        )
+        connected, _ = await communicator.connect()
+        assert connected is True
+
+        await communicator.send_json_to(_start_message("CA-PT", "MS-PT"))
+        greeting = await _read_media_frames(communicator, 1)
+        assert greeting, "expected greeting audio out"
+
+        utterance = encode_mulaw(_pcm(9000, 0.2) + _pcm(0, 1.0))
+        await communicator.send_json_to(_media_message(utterance))
+
+        roles = await _message_roles(conversation.id)
+        assert roles == ["USER", "ASSISTANT", "TOOL", "ASSISTANT"]
+
+        reply_frames = await _read_media_frames(communicator, 1, timeout=4.0)
+        assert reply_frames, "expected reply audio out"
+
+        await communicator.send_json_to({"event": "stop"})
+        await _wait_closed(communicator)
+        _ACTIVE_STREAMS.pop("CA-PT", None)
+        await _cleanup_db()
+
+    asyncio.run(scenario())

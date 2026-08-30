@@ -2,31 +2,33 @@ import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
 import {
+  BarChart,
   Badge,
   Card,
+  ChartCard,
   Empty,
   ErrorBox,
   formatDate,
   formatDuration,
   PageTitle,
+  StatCard,
   statusVariant,
   useFetch,
 } from '../components/Ui'
-
-function Stat({ label, value, variant }) {
-  return (
-    <Card className="stat">
-      <div className="stat-value">{value}</div>
-      <div className="stat-label muted">
-        {label}
-        {variant && <Badge variant={variant}>{variant}</Badge>}
-      </div>
-    </Card>
-  )
-}
+import {
+  PhoneIcon,
+  CheckIcon,
+  CloseIcon,
+  UsersIcon,
+  AgentIcon,
+  CalendarIcon,
+  TransferIcon,
+  ClockIcon,
+  ChartIcon,
+} from '../components/icons'
 
 export default function Dashboard() {
-  const { logout } = useAuth()
+  const { user, logout } = useAuth()
   const fetchOverview = () => api.get('/analytics/overview')
   const { data, error, loading, reload } = useFetch(fetchOverview, [])
 
@@ -35,54 +37,49 @@ export default function Dashboard() {
     return null
   }
 
+  const firstName = (user?.full_name || user?.email || '').split(' ')[0]
+
   return (
     <div>
-      <PageTitle title="Dashboard" />
+      <PageTitle
+        title="Dashboard"
+        subtitle={`Welcome back${firstName ? `, ${firstName}` : ''}. Here's what's happening with your AI agents.`}
+      />
       {error ? (
         <ErrorBox message={error} onRetry={reload} />
       ) : loading || !data ? (
-        <Card className="stat" />
+        <div className="stats-grid">
+          {[...Array(8)].map((_, index) => (
+            <Card className="stat" key={index}>
+              <div className="skeleton" style={{ height: 14 }} />
+            </Card>
+          ))}
+        </div>
       ) : (
         <>
           <div className="stats-grid">
-            <Stat label="Total calls" value={data.total_calls} />
-            <Stat label="Completed" value={data.completed_calls} variant="success" />
-            <Stat label="Missed" value={data.missed_calls} variant="warn" />
-            <Stat label="In progress" value={data.in_progress_calls} variant="info" />
-            <Stat label="Transferred" value={data.transferred_calls} variant="info" />
-            <Stat label="Failed" value={data.failed_calls} variant="danger" />
-            <Stat label="Avg duration" value={formatDuration(data.average_duration_seconds)} />
-            <Stat label="Customers" value={data.total_customers} />
-            <Stat label="Agents" value={data.total_agents} />
-            <Stat label="Appointments" value={data.appointments_scheduled} />
+            <StatCard label="Total calls" value={data.total_calls} icon={<PhoneIcon width={17} height={17} />} />
+            <StatCard label="Completed" value={data.completed_calls} variant="success" icon={<CheckIcon width={17} height={17} />} />
+            <StatCard label="Missed" value={data.missed_calls} variant="warn" icon={<CloseIcon width={17} height={17} />} />
+            <StatCard label="In progress" value={data.in_progress_calls} variant="info" icon={<ClockIcon width={17} height={17} />} />
+            <StatCard label="Transferred" value={data.transferred_calls} icon={<TransferIcon width={17} height={17} />} />
+            <StatCard label="Customers" value={data.total_customers} icon={<UsersIcon width={17} height={17} />} />
+            <StatCard label="Agents" value={data.total_agents} icon={<AgentIcon width={17} height={17} />} />
+            <StatCard label="Appointments" value={data.appointments_scheduled} variant="info" icon={<CalendarIcon width={17} height={17} />} />
           </div>
 
           <div className="grid two">
-            <Card title="Calls — last 7 days">
+            <ChartCard
+              title="Calls — last 7 days"
+              subtitle={`${data.total_calls} total calls`}
+              actions={<ChartIcon width={18} height={18} style={{ color: 'var(--muted)' }} />}
+            >
               {data.calls_last_7_days.length === 0 ? (
                 <Empty>No call data yet.</Empty>
               ) : (
-                <div className="bars">
-                  {data.calls_last_7_days.map((entry) => (
-                    <div className="bar-col" key={entry.day} title={`${entry.day}: ${entry.count}`}>
-                      <div className="bar-track">
-                        <div
-                          className="bar"
-                          style={{
-                            height: `${
-                              entry.count === 0
-                                ? 2
-                                : Math.max(8, (entry.count / data.total_calls) * 100)
-                            }%`,
-                          }}
-                        />
-                      </div>
-                      <span className="bar-day">{entry.day.slice(5)}</span>
-                    </div>
-                  ))}
-                </div>
+                <BarChart data={data.calls_last_7_days} height={200} />
               )}
-            </Card>
+            </ChartCard>
             <Card title="Outcome breakdown">
               {data.outcome_breakdown.length === 0 ? (
                 <Empty>No outcomes recorded yet.</Empty>
@@ -90,7 +87,10 @@ export default function Dashboard() {
                 <ul className="breakdown">
                   {data.outcome_breakdown.map((item) => (
                     <li key={item.outcome || 'unknown'}>
-                      <span>{item.outcome || 'unknown'}</span>
+                      <span>
+                        <span className={`status-dot ${statusVariant(item.outcome) || 'info'}`} />
+                        {item.outcome || 'unknown'}
+                      </span>
                       <strong>{item.count}</strong>
                     </li>
                   ))}
@@ -99,36 +99,39 @@ export default function Dashboard() {
             </Card>
           </div>
 
-          <Card title="Recent calls">
+          <Card
+            title="Recent calls"
+            actions={<Link to="/calls" className="btn small ghost">View all</Link>}
+          >
             {data.recent_calls.length === 0 ? (
               <Empty>No calls yet.</Empty>
             ) : (
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Status</th>
-                    <th>Agent</th>
-                    <th>Phone</th>
-                    <th>Started</th>
-                    <th>Duration</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.recent_calls.map((call) => (
-                    <tr key={call.id}>
-                      <td>
-                        <Link to={`/calls/${call.id}`}>
-                          <Badge variant={statusVariant(call.status)}>{call.status}</Badge>
-                        </Link>
-                      </td>
-                      <td>{call.agent_name}</td>
-                      <td>{call.caller_number}</td>
-                      <td>{formatDate(call.started_at)}</td>
-                      <td>{formatDuration(call.duration_seconds)}</td>
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Status</th>
+                      <th>Agent</th>
+                      <th>Phone</th>
+                      <th>Started</th>
+                      <th>Duration</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {data.recent_calls.map((call) => (
+                      <tr key={call.id} style={{ cursor: 'pointer' }} onClick={() => (window.location.hash = `#/calls/${call.id}`)}>
+                        <td>
+                          <Badge variant={statusVariant(call.status)}>{call.status}</Badge>
+                        </td>
+                        <td>{call.agent_name}</td>
+                        <td>{call.caller_number}</td>
+                        <td>{formatDate(call.started_at)}</td>
+                        <td>{formatDuration(call.duration_seconds)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </Card>
         </>
