@@ -9,6 +9,14 @@ from ai.agent import MAX_TOOL_ROUNDS, run_agent
 from ai.provider import LLMError
 from ai.tools import TOOLS, execute_tool
 from appointments.models import Appointment
+from conversations.models import (
+    Conversation,
+    ConversationStatus,
+    PhoneCall,
+    PhoneCallStatus,
+)
+from crm.models import Customer
+from knowledge.models import KnowledgeBase, KnowledgeChunk, KnowledgeDocument
 from tenancy.models import Organization
 
 pytestmark = pytest.mark.django_db
@@ -231,6 +239,212 @@ class TestAgentOrchestrator:
             run_agent("You are helpful.", [], org, agent.id)
 
 
-def test_tool_registry_contains_appointment_tools():
-    assert "check_appointment_availability" in TOOLS
-    assert "book_appointment" in TOOLS
+def test_tool_registry_contains_all_tools():
+    for name in [
+        "check_appointment_availability",
+        "book_appointment",
+        "lookup_customer",
+        "search_knowledge_base",
+        "transfer_to_human",
+    ]:
+        assert name in TOOLS
+
+
+class _HashEmbedder:
+    """Deterministic fake embedder: flag presence of known vocabulary words."""
+
+    _VOCAB = ["consultation", "cost", "fifty", "dollars", "dental", "cleaning"]
+
+    def embed(self, texts):
+        return [
+            [1.0 if word in text else 0.0 for word in self._VOCAB]
+            for text in texts
+        ]
+
+
+def _conversation(org, agent):
+    conversation = Conversation.objects.create(organization=org, agent=agent)
+    PhoneCall.objects.create(
+        conversation=conversation,
+        caller_number="+15553334444",
+        provider_status=PhoneCallStatus.IN_PROGRESS,
+    )
+    return conversation
+
+
+class TestLookupCustomerTool:
+    def test_found(self, org_agent):
+        org, agent = org_agent
+        Customer.objects.create(
+            organization=org,
+            phone_number="+15551234567",
+            name="John Doe",
+            email="john@example.com",
+            notes="Prefers email",
+        )
+        result = json.loads(
+            execute_tool(
+                org, agent.id, None, "lookup_customer",
+                json.dumps({"phone_number": "+15551234567"}),
+            )
+        )
+        assert result["found"] is True
+        assert result["name"] == "John Doe"
+        assert result["notes"] == "Prefers email"
+
+    def test_not_found(self, org_agent):
+        org, agent = org_agent
+        result = json.loads(
+            execute_tool(
+                org, agent.id, None, "lookup_customer",
+                json.dumps({"phone_number": "+15559999999"}),
+            )
+        )
+        assert result["found"] is False
+
+    def test_cross_org_isolation(self, org_agent):
+        org, agent = org_agent
+        other = Organization.objects.create(name="Rival")
+        Customer.objects.create(
+            organization=other, phone_number="+15551234567", name="Rival Customer"
+        )
+        result = json.loads(
+            execute_tool(
+                org, agent.id, None, "lookup_customer",
+                json.dumps({"phone_number": "+15551234567"}),
+            )
+        )
+        assert result["found"] is False
+        assert Customer.objects.count() == 1
+
+    def test_missing_phone_number_rejected(self, org_agent):
+        org, agent = org_agent
+        result = json.loads(
+            execute_tool(org, agent.id, None, "lookup_customer", "{}")
+        )
+        assert "error" in result
+
+
+class TestSearchKnowledgeBaseTool:
+    def _ingest(self, org, agent):
+        knowledge_base = KnowledgeBase.objects.create(organization=org, agent=agent, name="Pricing")
+        document = KnowledgeDocument.objects.create(
+            knowledge_base=knowledge_base,
+            filename="pricing.txt",
+            source_type="manual",
+            status="PROCESSED",
+        )
+        content = (
+            "consultation cost fifty dollars per session "
+            "dental cleaning eighty dollars"
+        )
+        KnowledgeChunk.objects.create(
+            document=document,
+            chunk_index=0,
+            content=content,
+            embedding=_HashEmbedder().embed([content])[0],
+        )
+        return knowledge_base
+
+    def test_returns_relevant_documents(self, org_agent, monkeypatch):
+        org, agent = org_agent
+        self._ingest(org, agent)
+        monkeypatch.setattr("knowledge.services.get_embedding_provider", lambda: _HashEmbedder())
+        result = json.loads(
+            execute_tool(
+                org, agent.id, None, "search_knowledge_base",
+                json.dumps({"query": "consultation cost"}),
+            )
+        )
+        assert result["found"] is True
+        assert "fifty dollars" in result["results"][0]["content"]
+        assert result["results"][0]["score"] > 0
+
+    def test_guards_against_hallucination(self, org_agent, monkeypatch):
+        org, agent = org_agent
+        self._ingest(org, agent)
+        monkeypatch.setattr("knowledge.services.get_embedding_provider", lambda: _HashEmbedder())
+        result = json.loads(
+            execute_tool(
+                org, agent.id, None, "search_knowledge_base",
+                json.dumps({"query": "violet walrus kangaroo"}),
+            )
+        )
+        assert result["found"] is False
+        assert "do not guess or invent" in result["message"].lower()
+
+    def test_handles_agent_without_knowledge_base(self, org_agent, monkeypatch):
+        org, agent = org_agent
+        monkeypatch.setattr("knowledge.services.get_embedding_provider", lambda: _HashEmbedder())
+        result = json.loads(
+            execute_tool(
+                org, agent.id, None, "search_knowledge_base",
+                json.dumps({"query": "consultation cost"}),
+            )
+        )
+        assert result["found"] is False
+        assert "no knowledge base" in result["message"].lower()
+
+    def test_missing_query_rejected(self, org_agent):
+        org, agent = org_agent
+        result = json.loads(
+            execute_tool(org, agent.id, None, "search_knowledge_base", "{}")
+        )
+        assert "error" in result
+
+
+class TestTransferToHumanTool:
+    def test_transfers_conversation(self, org_agent):
+        org, agent = org_agent
+        conversation = _conversation(org, agent)
+
+        result = json.loads(
+            execute_tool(
+                org, agent.id, conversation.id, "transfer_to_human",
+                json.dumps({"reason": "Customer requested a manager"}),
+            )
+        )
+        assert result["success"] is True
+
+        conversation.refresh_from_db()
+        assert conversation.status == ConversationStatus.CLOSED
+        assert conversation.ended_at is not None
+        assert conversation.phone_call.provider_status == PhoneCallStatus.TRANSFERRED
+
+    def test_succeeds_without_call(self, org_agent):
+        org, agent = org_agent
+        result = json.loads(
+            execute_tool(
+                org, agent.id, None, "transfer_to_human",
+                json.dumps({"reason": "Escalation"}),
+            )
+        )
+        assert result["success"] is True
+
+    def test_cross_org_call_untouched(self, org_agent):
+        org, agent = org_agent
+        other = Organization.objects.create(name="Rival")
+        rival_agent = Agent.objects.create(organization=other, name="R", system_prompt="p")
+        rival_conversation = _conversation(other, rival_agent)
+
+        result = json.loads(
+            execute_tool(
+                org, agent.id, rival_conversation.id, "transfer_to_human",
+                json.dumps({"reason": "Whatever"}),
+            )
+        )
+        assert result["success"] is True
+
+        rival_conversation.refresh_from_db()
+        assert rival_conversation.status == ConversationStatus.OPEN
+        assert (
+            rival_conversation.phone_call.provider_status
+            == PhoneCallStatus.IN_PROGRESS
+        )
+
+    def test_missing_reason_rejected(self, org_agent):
+        org, agent = org_agent
+        result = json.loads(
+            execute_tool(org, agent.id, None, "transfer_to_human", "{}")
+        )
+        assert "error" in result
