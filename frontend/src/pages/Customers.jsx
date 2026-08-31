@@ -188,7 +188,7 @@ export default function Customers() {
                   <td>{customer.phone_number}</td>
                   <td>{customer.name || '—'}</td>
                   <td>{customer.email || '—'}</td>
-                  <td className="muted">{customer.notes || '—'}</td>
+                  <td className="muted table-cell-truncate">{customer.notes || '—'}</td>
                   <td>{formatDate(customer.created_at)}</td>
                   <td className="actions">
                     <button className="btn small" onClick={() => startEdit(customer)}>

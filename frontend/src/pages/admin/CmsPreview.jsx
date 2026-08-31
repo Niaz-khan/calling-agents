@@ -78,11 +78,13 @@ export default function CmsPreview() {
   return (
     <div>
       <div
+        className="cms-preview-bar"
         style={{
           position: 'sticky',
           top: 0,
           zIndex: 60,
           display: 'flex',
+          flexWrap: 'wrap',
           gap: 12,
           alignItems: 'center',
           padding: '10px 16px',
@@ -92,7 +94,7 @@ export default function CmsPreview() {
           fontSize: 13,
         }}
       >
-        <span>
+        <span style={{ flex: '1 1 auto', minWidth: 0 }}>
           <strong>Draft preview</strong> — edited CMS content. Not visible publicly until the
           landing page is published.
         </span>

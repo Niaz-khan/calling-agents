@@ -13,6 +13,7 @@
   --border-strong: #d3d9e2;
   --text: #131a24;
   --text-2: #35404f;
+  --text-muted: #66717f;
   --muted: #66717f;
   --primary: #2563eb;
   --primary-dark: #1e50c8;
@@ -120,6 +121,78 @@ code {
   min-height: 100vh;
   background: var(--bg);
 }
+
+/* ---------------------------------------------------------------------------
+   Dark app theme — scoped to the authenticated app shell (business app + admin
+   console, both of which render inside .shell). Re-maps the global light
+   tokens to a calm, dark palette so the app feels premium and easy on the eyes
+   instead of stark white. Auth and landing pages keep their own look.
+   --------------------------------------------------------------------------- */
+.shell,
+.shell .topbar,
+.shell .widget-canvas {
+  --bg: #0e1320;
+  --bg-subtle: #141a29;
+  --surface: #161e2f;
+  --surface-2: #1a2336;
+  --surface-3: #202b40;
+  --border: #263149;
+  --border-strong: #33415f;
+  --text: #e7ecf5;
+  --text-2: #b6c0d1;
+  --text-muted: #8490a6;
+  --muted: #8490a6;
+  --primary: #4f8cff;
+  --primary-dark: #3b76e8;
+  --primary-soft: #203252;
+  --primary-contrast: #ffffff;
+  --success: #34d399;
+  --success-soft: #123629;
+  --warn: #fbbf24;
+  --warn-soft: #3a2e12;
+  --danger: #f87171;
+  --danger-soft: #3a1c20;
+  --info: #38bdf8;
+  --info-soft: #123142;
+  --violet: #a78bfa;
+  --violet-soft: #2b2144;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.55);
+}
+.shell {
+  background:
+    radial-gradient(60% 45% at 88% -5%, color-mix(in srgb, var(--primary) 12%, transparent), transparent 60%),
+    var(--bg);
+  color: var(--text);
+}
+.shell .topbar {
+  background: rgba(14, 19, 32, 0.78);
+}
+.shell .sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+.shell .brand-mark,
+.shell .main .brand .brand-mark {
+  background: linear-gradient(135deg, var(--primary), var(--violet));
+}
+.shell body {
+  background: var(--bg);
+}
+.shell .color-well {
+  background: var(--surface-3);
+}
+.shell .widget-preview .w-panel {
+  background: var(--surface);
+}
+.shell .widget-preview {
+  background: var(--bg-subtle);
+}
+.shell .mobile-bar {
+  background: var(--surface);
+}
+
 
 .sidebar {
   width: var(--nav-w);
@@ -411,6 +484,7 @@ code {
 
 .page-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
 }
@@ -849,6 +923,7 @@ select.input {
 
 .color-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
 }
@@ -1606,12 +1681,21 @@ select.input {
 
 .doc-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 8px;
   background: var(--surface-2);
   border-radius: 8px;
+}
+
+.doc-row > .doc-name {
+  min-width: 0;
+  flex: 1 1 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .search-results {
@@ -1637,6 +1721,7 @@ select.input {
 
 .cap-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   padding-top: 8px;
 }
@@ -1812,82 +1897,245 @@ select.input {
    Modern auth shell (login / sign up)
    ============================================================ */
 
+/* One shared ambient canvas. The branding and authentication form are two
+   parts of the SAME composition — no boxed cards, no vertical divider. The
+   background (with soft, blurred ambient orbs and glows) spans both columns
+   and keeps the atmosphere entirely intact during the login <-> signup swap. */
 .auth-shell {
   --auth-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --auth-glass-border: rgba(255, 255, 255, 0.10);
   min-height: 100vh;
   position: relative;
   overflow: hidden;
-  background: var(--surface);
+  isolation: isolate;
+  color: #e8ecf4;
   font-family: var(--auth-font, var(--font));
-}
-
-/* Both screens share one grid cell so they can exchange places animatedly.
-   The stage keeps the height of the taller screen — no layout jump on swap. */
-.auth-swap {
-  display: grid;
-  min-height: 100vh;
-}
-
-.auth-swap > .auth-screen {
-  grid-area: 1 / 1;
-  min-width: 0;
-  min-height: 100vh;
-  display: grid;
-  grid-template-columns: 1.08fr 1fr;
-  align-items: stretch;
   background:
-    radial-gradient(80% 60% at 0% 0%, color-mix(in srgb, var(--primary) 4%, transparent), transparent 60%),
-    var(--surface);
+    radial-gradient(120% 90% at 22% 8%, color-mix(in srgb, var(--primary) 26%, transparent), transparent 52%),
+    radial-gradient(70% 70% at 88% 88%, color-mix(in srgb, var(--secondary, #14b8a6) 22%, transparent), transparent 60%),
+    linear-gradient(160deg, #0b1020 0%, #0d1330 48%, #0a0e1d 100%);
+}
+
+/* Ambient blurred orbs — the subtle background "motion" and glow that keep
+   the page feeling like a single premium environment instead of two halves. */
+.auth-shell::before,
+.auth-shell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+.auth-shell::before {
+  background:
+    radial-gradient(46% 38% at 20% 28%, color-mix(in srgb, var(--primary) 34%, transparent), transparent 70%),
+    radial-gradient(34% 30% at 74% 66%, color-mix(in srgb, var(--secondary, #14b8a6) 26%, transparent), transparent 70%);
+  filter: blur(46px);
+}
+.auth-shell::after {
+  background:
+    radial-gradient(30% 26% at 62% 18%, rgba(255, 255, 255, 0.06), transparent 70%),
+    radial-gradient(24% 22% at 88% 30%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 70%);
+  filter: blur(30px);
+}
+
+/* One seamless canvas. The auth screen is a single positioning environment in
+   which two layered surfaces (branding + form) physically travel across each
+   other when toggling login <-> register. There is NO two-column flexbox/grid
+   swap: the surfaces are absolute, full-height layers that cross through the
+   blended centre, overlap, and morph their content mid-flight. */
+.auth-frame {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  isolation: isolate;
+}
+
+/* Seamless bridge: a soft gradient + blur right down the middle so the two
+   travelling surfaces visibly flow into one another as they pass. */
+.auth-frame::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 34%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--primary) 12%, transparent) 50%,
+    transparent
+  );
+  filter: blur(20px);
+  z-index: 3;
+}
+
+/* ---------------------------------------------------------------------------
+   Traveling zones — ONE unified canvas
+   --------------------------------------------------------------------------- */
+
+/* The two zones are absolute, half-width, full-height surfaces layered on the
+   shared canvas. They physically cross one another when toggling login <->
+   register: the (single, persistent) branding travels left <-> right while the
+   form region travels the opposite way, so both pass through the blended
+   centre and exchange places. No two-column grid, no hard divider. */
+.auth-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  z-index: 1;
+  transition: none; /* instant by default; motion only while a swap runs */
+}
+
+/* Branding zone sits on the LEFT in login mode and travels RIGHT (by 100% of
+   its own width = half the viewport) into register mode. */
+.auth-brand-zone {
+  left: 0;
+  will-change: transform;
+  transform: translateX(0);
+  z-index: 1;
+}
+.auth-shell.is-register .auth-brand-zone {
+  transform: translateX(100%);
+}
+
+/* Form zone sits on the RIGHT in login mode and travels LEFT into register. */
+.auth-form-zone {
+  left: 50%;
+  will-change: transform;
+  transform: translateX(0);
+  z-index: 2;
+}
+.auth-shell.is-register .auth-form-zone {
+  transform: translateX(-100%);
+}
+
+/* A single organic edge: the branding zone's own gradient bleeds 20-30% into
+   the form side via a large blurred pseudo-element, so the centre is blended
+   rather than cut. */
+.auth-brand-zone::before {
+  content: '';
+  position: absolute;
+  top: -10%;
+  bottom: -10%;
+  left: 62%;
+  width: 70%;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    60% 60% at 40% 50%,
+    color-mix(in srgb, var(--primary) 16%, transparent),
+    transparent 70%
+  );
+  filter: blur(60px);
+}
+
+/* Motion drivers — only active while JS marks a transition running on <html>.
+   The leaving brand/form are slightly scaled + dimmed so the exchange reads as
+   a morph, not a rigid slide. */
+html.auth-transitioning .auth-brand-zone,
+html.auth-transitioning .auth-form-zone {
+  transition: transform 0.82s cubic-bezier(0.22, 1, 0.36, 1);
+}
+html.auth-transitioning .auth-brand-zone {
+  z-index: 2;
+}
+html.auth-transitioning .auth-form-zone {
+  z-index: 3;
+}
+
+/* Premium morph: as the surfaces leave their resting side they slightly relax
+   and soften, then settle into the target side. */
+html.auth-transitioning .auth-zone {
+  filter: blur(0.4px);
+}
+
+/* ---------------------------------------------------------------------------
+   Form content crossfade
+   --------------------------------------------------------------------------- */
+
+/* Both form variants live inside the (single) form zone, stacked in the same
+   cell. The active one is visible; the inactive one waits to blend in. */
+.auth-form-zone .auth-form-slot {
+  grid-area: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transform: translateX(-48px) scale(0.985);
-  transition:
-    opacity 0.56s var(--auth-ease),
-    transform 0.56s var(--auth-ease),
-    visibility 0.56s;
-  will-change: transform, opacity;
+  will-change: transform, opacity, filter;
 }
-
-.auth-swap > .auth-screen.register-side {
-  grid-template-columns: 1fr 1.08fr;
-  transform: translateX(48px) scale(0.985);
-}
-
-.auth-swap > .auth-screen.active {
+.auth-form-zone .auth-form-slot.active {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transform: translateX(0) scale(1);
 }
 
-/* Branding ------------------------------------------------ */
+/* The form zone is a grid so the two slots overlap in one cell. */
+.auth-form-zone .auth-form-stack {
+  display: grid;
+  width: 100%;
+}
 
+/* During a swap the outgoing form fades/blurs out and the incoming form
+   slides in, slightly delayed so the change happens mid-travel while the
+   branding is crossing the centre. */
+html.auth-transitioning .auth-form-slot {
+  transition:
+    opacity 0.5s ease 0.22s,
+    transform 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.22s,
+    filter 0.5s ease 0.22s,
+    visibility 0.5s ease 0.22s;
+}
+html.auth-transitioning .auth-form-slot.active {
+  transform: translateY(0);
+  filter: blur(0);
+}
+html.auth-transitioning .auth-form-slot:not(.active) {
+  opacity: 0;
+  transform: translateY(14px);
+  filter: blur(8px);
+  visibility: hidden;
+}
+
+
+/* Branding side — sits directly on the shared canvas. No solid rectangle;
+   a soft radial glow blooms from behind the copy toward the centre so it
+   visibly flows into the form area. */
 .auth-brand-panel {
   position: relative;
   display: flex;
   flex-direction: column;
   justify-content: center;
+  flex: 1;
+  width: 100%;
   gap: var(--space-6);
   padding: clamp(32px, 6vw, 72px);
   color: #fff;
-  overflow: hidden;
-  background:
-    radial-gradient(120% 120% at 0% 0%, rgba(255, 255, 255, 0.16), transparent 45%),
-    radial-gradient(80% 70% at 100% 100%, color-mix(in srgb, var(--secondary, #14b8a6) 40%, transparent), transparent 62%),
-    linear-gradient(150deg, var(--primary), color-mix(in srgb, var(--primary) 30%, #0b1526));
+  z-index: 1;
 }
 
-.auth-brand-panel::after {
-  content: '';
+.auth-brand-glow {
   position: absolute;
-  right: -160px;
-  bottom: -160px;
-  width: 420px;
-  height: 420px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  left: 18%;
+  top: 20%;
+  right: -30%;
+  bottom: -12%;
   border-radius: 50%;
   pointer-events: none;
+  z-index: -1;
+  background:
+    radial-gradient(52% 48% at 32% 34%, color-mix(in srgb, var(--primary) 46%, transparent), transparent 70%),
+    radial-gradient(40% 42% at 74% 76%, color-mix(in srgb, var(--secondary, #14b8a6) 34%, transparent), transparent 70%);
+  filter: blur(52px);
 }
 
 .auth-brand-panel .l-logo {
@@ -1900,8 +2148,8 @@ select.input {
 .auth-brand-panel .l-logo-mark {
   width: 34px;
   height: 34px;
-  background: rgba(255, 255, 255, 0.18);
-  box-shadow: none;
+  background: color-mix(in srgb, var(--primary) 40%, rgba(255, 255, 255, 0.3));
+  box-shadow: 0 0 24px color-mix(in srgb, var(--primary) 50%, transparent);
   font-size: 16px;
 }
 
@@ -1920,19 +2168,24 @@ select.input {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.75);
+  color: color-mix(in srgb, var(--primary) 30%, #cfd8ea);
 }
 
 .auth-brand-copy h1 {
   margin: 0;
-  font-size: clamp(28px, 3.2vw, 40px);
-  line-height: 1.12;
-  letter-spacing: -0.02em;
+  font-size: clamp(30px, 3.4vw, 44px);
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  background: linear-gradient(180deg, #ffffff 20%, rgba(255, 255, 255, 0.86));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: #fff;
 }
 
 .auth-brand-copy p:last-child {
   margin: 0;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(226, 232, 244, 0.82);
   font-size: 15px;
   line-height: 1.6;
 }
@@ -1955,7 +2208,7 @@ select.input {
   top: 6px;
   bottom: 6px;
   width: 1px;
-  background: linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.08));
+  background: linear-gradient(color-mix(in srgb, var(--primary) 60%, #fff), rgba(255, 255, 255, 0.1));
 }
 
 .auth-brand-steps li {
@@ -1963,7 +2216,7 @@ select.input {
   align-items: center;
   gap: 10px;
   font-size: 13.5px;
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(230, 236, 248, 0.92);
 }
 
 .auth-step-ico {
@@ -1975,19 +2228,22 @@ select.input {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.18);
+  background: color-mix(in srgb, var(--primary) 36%, transparent);
   color: #fff;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--primary) 45%, transparent);
 }
 
-/* Form side ------------------------------------------------ */
-
+/* Form side — a soft glass surface that belongs to the same environment.
+   Semi-transparent, blurred, thin luminous border; it sits over the ambient
+   canvas and the brand glow fades in behind it rather than a hard edge. */
 .auth-form-panel {
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  flex: 1;
+  width: 100%;
   padding: clamp(24px, 5vw, 60px);
-  background: var(--surface);
   min-width: 0;
 }
 
@@ -1997,6 +2253,15 @@ select.input {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  padding: clamp(22px, 3vw, 34px);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--auth-glass-border);
+  box-shadow:
+    0 24px 60px -28px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
 }
 
 .auth-shell .auth-seg {
@@ -2004,8 +2269,8 @@ select.input {
   display: grid;
   grid-template-columns: 1fr 1fr;
   padding: 4px;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--auth-glass-border);
   border-radius: 12px;
 }
 
@@ -2015,9 +2280,9 @@ select.input {
   left: 4px;
   bottom: 4px;
   width: calc(50% - 4px);
-  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+  background: color-mix(in srgb, var(--primary) 22%, rgba(255, 255, 255, 0.06));
   border-radius: 9px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--primary) 30%, transparent);
   transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -2035,13 +2300,13 @@ select.input {
   font: inherit;
   font-size: 13.5px;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--muted, #9aa6bd);
   cursor: pointer;
   transition: color 0.25s ease;
 }
 
 .auth-shell .auth-seg button.active {
-  color: var(--text);
+  color: #f2f5fb;
 }
 
 .auth-shell .auth-seg button:focus-visible {
@@ -2057,19 +2322,73 @@ select.input {
 
 .auth-form-head h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: 23px;
   letter-spacing: -0.02em;
+  color: #f2f5fb;
 }
 
 .auth-form-head p {
   margin: 4px 0 0;
   font-size: 13px;
-  color: var(--muted);
+  color: var(--muted, #9aa6bd);
+}
+
+.auth-shell .field-label,
+.auth-shell .field-label-row .field-label {
+  color: #c6d0e0;
+}
+
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  color: #c6d0e0;
+  margin-bottom: 6px;
+}
+
+.field-label-row .field-label {
+  display: inline-flex;
+  margin-bottom: 0;
+}
+
+.auth-forgot {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--primary) 35%, #c9d2e3);
+  cursor: pointer;
+}
+
+.auth-forgot:hover {
+  color: var(--primary, #2e7cf6);
+  text-decoration: underline;
+}
+
+.auth-forgot:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.auth-shell .input {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #eef2fa;
+}
+
+.auth-shell .input::placeholder {
+  color: rgba(199, 208, 226, 0.5);
 }
 
 .auth-shell .input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .auth-pass {
@@ -2092,14 +2411,14 @@ select.input {
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--muted);
+  color: var(--muted, #9aa6bd);
   cursor: pointer;
   transition: color 0.2s ease, background 0.2s ease;
 }
 
 .auth-pass-toggle:hover {
-  color: var(--text);
-  background: var(--bg);
+  color: #eef2fa;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .auth-pass-toggle:focus-visible {
@@ -2109,20 +2428,21 @@ select.input {
 
 .auth-shell .auth-submit {
   margin-top: 4px;
+  box-shadow: 0 10px 26px -12px color-mix(in srgb, var(--primary) 60%, transparent);
 }
 
 .auth-shell .auth-alt {
   margin: 0;
   text-align: center;
   font-size: 13px;
-  color: var(--muted);
+  color: var(--muted, #9aa6bd);
 }
 
 .auth-shell .linkish {
   border: 0;
   background: none;
   padding: 0;
-  color: var(--primary);
+  color: var(--primary, #2e7cf6);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -2146,17 +2466,18 @@ select.input {
 
 .auth-form-foot .auth-back {
   font-size: 13px;
-  color: var(--muted);
+  color: var(--muted, #9aa6bd);
 }
 
 .auth-form-foot .auth-back:hover {
-  color: var(--text);
+  color: #eef2fa;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .auth-swap > .auth-screen {
+  .auth-zone,
+  .auth-form-slot {
     transition: none;
-    transform: none;
+    filter: none;
   }
   .auth-shell .auth-seg .auth-seg-pill {
     transition: none;
@@ -2164,40 +2485,71 @@ select.input {
 }
 
 @media (max-width: 900px) {
-  /* Stack: brand panel on top, form below — same order for both modes so the
-     mobile flow stays simple and predictable. */
-  .auth-swap {
-    min-height: 100vh;
+  /* Stack the two zones vertically as a single flow. The (single) branding
+     panel sits compactly above the form for both modes; in register mode the
+     form is ordered first so it leads, with the branding below. No traveling
+     animation on small screens — content simply crossfades in place. */
+  .auth-frame {
+    display: flex;
+    flex-direction: column;
   }
-  .auth-swap > .auth-screen {
-    grid-template-columns: 1fr;
+  .auth-frame::before {
+    /* Horizontal bridge — the glow now fades top-to-bottom across the seam. */
+    left: 0;
+    right: 0;
+    top: 50%;
+    bottom: auto;
+    width: 100%;
+    height: 26%;
+    transform: translateY(-50%);
+    background: linear-gradient(
+      180deg,
+      transparent,
+      color-mix(in srgb, var(--primary) 10%, transparent) 50%,
+      transparent
+    );
+  }
+  .auth-shell .auth-zone {
+    position: relative;
+    width: 100%;
     min-height: 0;
-    align-self: stretch;
+    height: auto;
+    transform: none;
   }
-  .auth-swap > .auth-screen .auth-brand-panel {
-    order: -1;
+  .auth-form-zone {
+    order: 2;
+  }
+  .auth-shell.is-register .auth-form-zone {
+    order: 1;
+  }
+  .auth-shell.is-register .auth-brand-zone {
+    order: 2;
+  }
+  .auth-brand-zone::before {
+    display: none;
   }
   .auth-brand-panel {
     justify-content: flex-start;
-    padding: 28px 24px;
+    padding: 32px 24px 20px;
   }
   .auth-brand-copy h1 {
     font-size: clamp(24px, 5vw, 32px);
-  }
-  .auth-brand-panel::after {
-    display: none;
   }
 }
 
 @media (max-width: 560px) {
   .auth-brand-panel {
     gap: var(--space-4);
+    padding: 26px 20px 10px;
   }
   .auth-brand-steps {
     display: none;
   }
   .auth-form-panel {
-    padding: 24px 20px;
+    padding: 16px 14px 28px;
+  }
+  .auth-form-box {
+    padding: 22px 18px;
   }
 }
 
@@ -2304,6 +2656,106 @@ select.input {
   .table-wrap {
     -webkit-overflow-scrolling: touch;
   }
+
+  /* Contain wide bare tables that are rendered directly inside a card/panel
+     without a .table-wrap scroll container, so they scroll in place instead
+     of forcing a full-page horizontal scroll on small screens. */
+  .card-body > .table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (max-width: 560px) {
+  /* Topbar / user menu */
+  .topbar {
+    gap: var(--space-2);
+    padding: 0 var(--space-2);
+  }
+  .topbar-title {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .user-menu .um-name {
+    display: none;
+  }
+  .topbar-actions {
+    gap: var(--space-1);
+  }
+
+  /* Stat cards: tight but readable 2-up */
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+  }
+  .stat-label {
+    gap: 4px;
+  }
+
+  /* Dense bar charts must scroll instead of overflowing the card */
+  .bars {
+    gap: 4px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .bar-track {
+    max-width: 30px;
+  }
+
+  /* Toolbar filters stack full width */
+  .toolbar .field {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  /* Business-hours editor stacks so each day reads as a compact block */
+  .hours-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .hours-times {
+    flex-wrap: wrap;
+  }
+  .hours-times .input {
+    width: 100%;
+  }
+  .hours-closed {
+    margin-left: 0;
+  }
+
+  /* Action cells / rows wrap cleanly */
+  .table .actions,
+  .row-actions {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  /* Widget preview canvas is smaller on phones */
+  .widget-canvas {
+    min-height: 200px;
+  }
+
+  /* Modal padding tighter on small screens */
+  .modal-backdrop {
+    padding: var(--space-3);
+  }
+  .modal-head,
+  .modal-body,
+  .modal-foot {
+    padding: var(--space-4);
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  .content {
+    padding: var(--space-3);
+  }
 }
 /* ---------------------------------------------------------------------------
    Legacy page helper classes (kept so pre-existing pages render consistently)
@@ -2312,6 +2764,16 @@ select.input {
 .toolbar-card, .card-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .toolbar-card { justify-content: space-between; }
 .card-toolbar { justify-content: flex-end; margin-block-start: 8px; }
+.row-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.table .table-cell-truncate {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.table td {
+  vertical-align: middle;
+}
 .analytics-chart { display: flex; flex-direction: column; gap: 12px; }
 .analytics-chart .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .snippet-hint { font-size: var(--font-sm); color: var(--text-muted); }

@@ -302,7 +302,7 @@ export default function Knowledge() {
                   ) : (
                     docs.map((document) => (
                       <div className="doc-row" key={document.id}>
-                        <div>
+                        <div className="doc-name">
                           <div>{document.filename}</div>
                           <div className="muted">
                             {document.status}

@@ -343,8 +343,10 @@
 
 .l-trust {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  gap: 6px 10px;
   color: var(--l-muted);
   font-size: 13.5px;
 }
@@ -977,8 +979,9 @@
 
 .l-api-resp-top {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 6px 10px;
   margin-bottom: 10px;
 }
 
@@ -998,6 +1001,11 @@
   padding: 3px 8px;
   border: 1px solid var(--l-border);
   border-radius: 7px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .l-api-resp-json {
@@ -1627,13 +1635,24 @@
 
 @media (max-width: 700px) {
   .l-section {
-    padding: 64px 0;
+    padding: 56px 0;
   }
   .l-nav-links {
     display: none;
   }
+  /* Keep only the hamburger in the top-right; CTA buttons already exist in
+     the mobile menu, so hiding the desktop copy avoids horizontal overflow. */
+  .l-nav-actions .l-btn {
+    display: none;
+  }
+  .l-nav-actions {
+    margin-left: auto;
+  }
   .l-feature {
     grid-column: span 12;
+  }
+  .l-feature.wide {
+    grid-template-columns: 1fr;
   }
   .l-showcase,
   .l-steps,
@@ -1648,6 +1667,24 @@
   }
   .l-hamburger {
     display: flex;
+  }
+}
+
+@media (max-width: 480px) {
+  .l-section {
+    padding: 44px 0;
+  }
+  .l-hero {
+    padding-top: 28px;
+  }
+  .l-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+  .l-footer-grid {
+    grid-template-columns: 1fr;
+  }
+  .l-api-resp-top {
+    flex-wrap: wrap;
   }
 }
 

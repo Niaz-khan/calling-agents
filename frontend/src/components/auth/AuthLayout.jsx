@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../../api'
 import { useAuth } from '../../auth'
@@ -38,8 +38,29 @@ export default function AuthLayout() {
   const [fullName, setFullName] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [leavingFor, setLeavingFor] = useState(null)
+  const prevIsLogin = useRef(isLogin)
+  const reducedMotion =
+    typeof window !== 'undefined' &&
+    !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
-  if (user) return <Navigate to="/" replace />
+  useEffect(() => {
+    if (isLogin === prevIsLogin.current) return
+    prevIsLogin.current = isLogin
+    if (reducedMotion) {
+      setLeavingFor(null)
+      return
+    }
+    document.documentElement.classList.add('auth-transitioning')
+    setLeavingFor(prevIsLogin.current)
+    const t = window.setTimeout(() => {
+      setLeavingFor(null)
+      document.documentElement.classList.remove('auth-transitioning')
+    }, 820)
+    return () => window.clearTimeout(t)
+  }, [isLogin, reducedMotion])
+
+  if (user) return <Navigate to="/app" replace />
 
   const switchMode = (next) => {
     if (submitting) return
@@ -58,7 +79,7 @@ export default function AuthLayout() {
     setSubmitting(true)
     try {
       await login(email, password)
-      navigate('/')
+      navigate('/app')
     } catch (err) {
       fail(err)
     }
@@ -70,7 +91,7 @@ export default function AuthLayout() {
     setSubmitting(true)
     try {
       await register({ full_name: fullName, email, password })
-      navigate('/')
+      navigate('/app')
     } catch (err) {
       fail(err)
     }
@@ -83,48 +104,66 @@ export default function AuthLayout() {
     '--auth-font': `'${brand.font_family || 'Inter'}', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`,
   }
 
-  return (
-    <div className="auth-shell" style={theme}>
-      <div className="auth-swap">
-        <section
-          className={`auth-screen login-side${isLogin ? ' active' : ''}`}
-          aria-hidden={!isLogin}
-        >
-          <AuthBrandPanel brand={brand} mode="login" />
-          <AuthFormPanel mode="login" onSwitch={switchMode}>
-            <LoginForm
-              email={email}
-              password={password}
-              error={error}
-              submitting={submitting}
-              onEmail={setEmail}
-              onPassword={setPassword}
-              onSubmit={handleLogin}
-              onSwitch={() => switchMode('register')}
-            />
-          </AuthFormPanel>
-        </section>
+  const dirClass = leavingFor === true ? 'from-login' : leavingFor === false ? 'from-register' : ''
+  const maybeTransition = reducedMotion ? '' : ' may-transition'
 
-        <section
-          className={`auth-screen register-side${!isLogin ? ' active' : ''}`}
-          aria-hidden={isLogin}
-        >
-          <AuthFormPanel mode="register" onSwitch={switchMode}>
-            <RegisterForm
-              fullName={fullName}
-              email={email}
-              password={password}
-              error={error}
-              submitting={submitting}
-              onFullName={setFullName}
-              onEmail={setEmail}
-              onPassword={setPassword}
-              onSubmit={handleRegister}
-              onSwitch={() => switchMode('login')}
-            />
-          </AuthFormPanel>
-          <AuthBrandPanel brand={brand} mode="register" />
-        </section>
+  return (
+    <div
+      className={`auth-shell${isLogin ? ' is-login' : ' is-register'}${dirClass ? ` auth-${dirClass}` : ''}`}
+      style={theme}
+    >
+      <div className="auth-frame">
+        {/* ONE persistent branding panel. It carries the logo, AI visual and
+            messaging and physically travels across the shared canvas — from the
+            LEFT in login mode to the RIGHT in register mode — as a single
+            continuous element that never unmounts. */}
+        <div className="auth-zone auth-brand-zone" aria-hidden={false}>
+          <AuthBrandPanel brand={brand} />
+        </div>
+
+        {/* The form region is part of the same composition. It travels to the
+            opposite side (RIGHT in login mode, LEFT in register mode) while its
+            internal content crossfades from the LoginForm to the SignupForm. */}
+        <div className="auth-zone auth-form-zone">
+          <div className="auth-form-stack">
+            <div
+              className={`auth-form-slot${isLogin ? ' active' : ''}${maybeTransition}`}
+              aria-hidden={!isLogin}
+            >
+              <AuthFormPanel mode="login" onSwitch={switchMode}>
+                <LoginForm
+                  email={email}
+                  password={password}
+                  error={error}
+                  submitting={submitting}
+                  onEmail={setEmail}
+                  onPassword={setPassword}
+                  onSubmit={handleLogin}
+                  onSwitch={() => switchMode('register')}
+                />
+              </AuthFormPanel>
+            </div>
+            <div
+              className={`auth-form-slot${!isLogin ? ' active' : ''}${maybeTransition}`}
+              aria-hidden={isLogin}
+            >
+              <AuthFormPanel mode="register" onSwitch={switchMode}>
+                <RegisterForm
+                  fullName={fullName}
+                  email={email}
+                  password={password}
+                  error={error}
+                  submitting={submitting}
+                  onFullName={setFullName}
+                  onEmail={setEmail}
+                  onPassword={setPassword}
+                  onSubmit={handleRegister}
+                  onSwitch={() => switchMode('login')}
+                />
+              </AuthFormPanel>
+            </div>
+          </div>
+        </div>
       </div>
       <Outlet />
     </div>

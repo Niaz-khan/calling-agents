@@ -42,6 +42,11 @@ export default function LoginForm({
         value={password}
         onChange={onPassword}
         autoComplete="current-password"
+        forgot={
+          <button type="button" className="auth-forgot">
+            Forgot password?
+          </button>
+        }
       />
 
       <button className="btn primary block auth-submit" type="submit" disabled={submitting}>

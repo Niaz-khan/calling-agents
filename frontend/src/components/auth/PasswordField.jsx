@@ -1,13 +1,16 @@
 import { useState } from 'react'
 import { EyeIcon, EyeOffIcon } from '../icons'
 
-export default function PasswordField({ id, label, value, onChange, autoComplete, minLength }) {
+export default function PasswordField({ id, label, value, onChange, autoComplete, minLength, forgot }) {
   const [visible, setVisible] = useState(false)
   return (
     <div className="field">
-      <label className="field-label" htmlFor={id}>
-        {label}
-      </label>
+      <div className="field-label-row">
+        <label className="field-label" htmlFor={id}>
+          {label}
+        </label>
+        {forgot}
+      </div>
       <div className="auth-pass">
         <input
           id={id}
