@@ -326,6 +326,15 @@ export function EyeIcon(props) {
   )
 }
 
+export function EyeOffIcon(props) {
+  return (
+    <svg {...props} {...base}>
+      <path d="M17.9 17.9A10.4 10.4 0 0112 20c-7 0-11-8-11-8a20 20 0 014.1-5.9M9.9 4.24A9.9 9.9 0 0112 4c7 0 11 8 11 8a20 20 0 01-2.16 3.19" />
+      <path d="M1 1l22 22M9.86 9.86a3 3 0 004.28 4.28" />
+    </svg>
+  )
+}
+
 export function StoreIcon(props) {
   return (
     <svg {...props} {...base}>

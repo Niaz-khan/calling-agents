@@ -1809,6 +1809,399 @@ select.input {
 }
 
 /* ============================================================
+   Modern auth shell (login / sign up)
+   ============================================================ */
+
+.auth-shell {
+  --auth-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+  background: var(--surface);
+  font-family: var(--auth-font, var(--font));
+}
+
+/* Both screens share one grid cell so they can exchange places animatedly.
+   The stage keeps the height of the taller screen — no layout jump on swap. */
+.auth-swap {
+  display: grid;
+  min-height: 100vh;
+}
+
+.auth-swap > .auth-screen {
+  grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1.08fr 1fr;
+  align-items: stretch;
+  background:
+    radial-gradient(80% 60% at 0% 0%, color-mix(in srgb, var(--primary) 4%, transparent), transparent 60%),
+    var(--surface);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-48px) scale(0.985);
+  transition:
+    opacity 0.56s var(--auth-ease),
+    transform 0.56s var(--auth-ease),
+    visibility 0.56s;
+  will-change: transform, opacity;
+}
+
+.auth-swap > .auth-screen.register-side {
+  grid-template-columns: 1fr 1.08fr;
+  transform: translateX(48px) scale(0.985);
+}
+
+.auth-swap > .auth-screen.active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(0) scale(1);
+}
+
+/* Branding ------------------------------------------------ */
+
+.auth-brand-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-6);
+  padding: clamp(32px, 6vw, 72px);
+  color: #fff;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 120% at 0% 0%, rgba(255, 255, 255, 0.16), transparent 45%),
+    radial-gradient(80% 70% at 100% 100%, color-mix(in srgb, var(--secondary, #14b8a6) 40%, transparent), transparent 62%),
+    linear-gradient(150deg, var(--primary), color-mix(in srgb, var(--primary) 30%, #0b1526));
+}
+
+.auth-brand-panel::after {
+  content: '';
+  position: absolute;
+  right: -160px;
+  bottom: -160px;
+  width: 420px;
+  height: 420px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.auth-brand-panel .l-logo {
+  position: relative;
+  z-index: 1;
+  color: #fff;
+  font-size: 18px;
+}
+
+.auth-brand-panel .l-logo-mark {
+  width: 34px;
+  height: 34px;
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: none;
+  font-size: 16px;
+}
+
+.auth-brand-copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 460px;
+}
+
+.auth-brand-eyebrow {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.auth-brand-copy h1 {
+  margin: 0;
+  font-size: clamp(28px, 3.2vw, 40px);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+}
+
+.auth-brand-copy p:last-child {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.auth-brand-steps {
+  position: relative;
+  z-index: 1;
+  list-style: none;
+  margin: 0;
+  padding: 4px 0 4px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auth-brand-steps::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 6px;
+  bottom: 6px;
+  width: 1px;
+  background: linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.08));
+}
+
+.auth-brand-steps li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.auth-step-ico {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+/* Form side ------------------------------------------------ */
+
+.auth-form-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: clamp(24px, 5vw, 60px);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.auth-form-box {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.auth-shell .auth-seg {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.auth-shell .auth-seg .auth-seg-pill {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  bottom: 4px;
+  width: calc(50% - 4px);
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+  border-radius: 9px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.auth-shell .auth-seg.is-reg .auth-seg-pill {
+  transform: translateX(100%);
+}
+
+.auth-shell .auth-seg button {
+  position: relative;
+  z-index: 1;
+  padding: 10px 0;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.25s ease;
+}
+
+.auth-shell .auth-seg button.active {
+  color: var(--text);
+}
+
+.auth-shell .auth-seg button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.auth-form-head h2 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+
+.auth-form-head p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.auth-shell .input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.auth-pass {
+  position: relative;
+}
+
+.auth-pass .input {
+  padding-right: 44px;
+}
+
+.auth-pass-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.auth-pass-toggle:hover {
+  color: var(--text);
+  background: var(--bg);
+}
+
+.auth-pass-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.auth-shell .auth-submit {
+  margin-top: 4px;
+}
+
+.auth-shell .auth-alt {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.auth-shell .linkish {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-shell .linkish:hover {
+  text-decoration: underline;
+}
+
+.auth-shell .linkish:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.auth-form-foot {
+  margin: 0;
+  text-align: center;
+}
+
+.auth-form-foot .auth-back {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.auth-form-foot .auth-back:hover {
+  color: var(--text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-swap > .auth-screen {
+    transition: none;
+    transform: none;
+  }
+  .auth-shell .auth-seg .auth-seg-pill {
+    transition: none;
+  }
+}
+
+@media (max-width: 900px) {
+  /* Stack: brand panel on top, form below — same order for both modes so the
+     mobile flow stays simple and predictable. */
+  .auth-swap {
+    min-height: 100vh;
+  }
+  .auth-swap > .auth-screen {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    align-self: stretch;
+  }
+  .auth-swap > .auth-screen .auth-brand-panel {
+    order: -1;
+  }
+  .auth-brand-panel {
+    justify-content: flex-start;
+    padding: 28px 24px;
+  }
+  .auth-brand-copy h1 {
+    font-size: clamp(24px, 5vw, 32px);
+  }
+  .auth-brand-panel::after {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .auth-brand-panel {
+    gap: var(--space-4);
+  }
+  .auth-brand-steps {
+    display: none;
+  }
+  .auth-form-panel {
+    padding: 24px 20px;
+  }
+}
+
+/* ============================================================
    Responsive
    ============================================================ */
 

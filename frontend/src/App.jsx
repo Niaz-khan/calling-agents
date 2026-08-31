@@ -6,8 +6,7 @@ import { setToken } from './api'
 import Layout from './components/Layout'
 import AdminLayout from './components/AdminLayout'
 import Landing from './pages/Landing'
-import Login from './pages/Login'
-import Register from './pages/Register'
+import AuthLayout from './components/auth/AuthLayout'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Agents = lazy(() => import('./pages/Agents'))
@@ -136,8 +135,10 @@ export default function App() {
         <HashRouter>
           <Routes>
             <Route path="/" element={<Landing />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+            <Route element={<AuthLayout />}>
+              <Route path="/login" element={null} />
+              <Route path="/register" element={null} />
+            </Route>
 
             <Route element={<Protected />}>
               <Route path="/app" element={<Dashboard />} />
