@@ -39,7 +39,7 @@ export default function PhoneNumbers() {
   const agents = agentsResult.data || []
 
   const fetchStatus = () => api.get('/telephony/status')
-  const statusResult = useFetch(fetchStatus, null)
+  const statusResult = useFetch(fetchStatus, [])
   const [testing, setTesting] = useState(false)
 
   const [showForm, setShowForm] = useState(false)

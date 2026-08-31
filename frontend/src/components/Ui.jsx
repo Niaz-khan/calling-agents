@@ -35,7 +35,8 @@ export function useFetch(factory, deps = []) {
     return () => {
       alive = false
     }
-  }, [reloadKey, ...deps])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadKey, ...(Array.isArray(deps) ? deps : [])])
 
   const reload = useCallback(() => setReloadKey((key) => key + 1), [])
 
