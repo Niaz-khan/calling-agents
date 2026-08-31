@@ -1,7 +1,8 @@
 import { Component, lazy, Suspense } from 'react'
 import { HashRouter, Route, Routes, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth'
-import { Loading } from './components/Ui'
+import { Loading, Empty } from './components/Ui'
+import { OrganizationIcon } from './components/icons'
 import { setToken } from './api'
 import Layout from './components/Layout'
 import AdminLayout from './components/AdminLayout'
@@ -56,14 +57,50 @@ function PageLoader() {
   )
 }
 
+function NoOrganization({ user, logout }) {
+  return (
+    <div className="no-org-panel">
+      <Empty
+        icon={<OrganizationIcon width={22} height={22} />}
+        title="You don't have an organization yet"
+      >
+        Your account <strong>{user.full_name || user.email}</strong> isn't linked to an
+        organization, so there's no business workspace to show yet.
+      </Empty>
+      <div className="no-org-steps">
+        <p>To get started, an administrator needs to add you to an organization. If you
+        signed up yourself, your workspace should exist — try re-registering, or contact
+        your account administrator for help.</p>
+      </div>
+      <div className="no-org-actions">
+        <button className="btn" onClick={logout}>
+          Log out
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function Protected() {
-  const { user, loading } = useAuth()
+  const { user, loading, logout, isPlatformUser } = useAuth()
   if (loading) return <Loading />
   if (!user) return <Navigate to="/login" replace />
+
+  const organizations = user.organizations || []
+  const isPlatform = isPlatformUser
+
+  // Platform admins without an organization belong in the /admin console, not the
+  // business workspace — send them there instead of the broken org-scoped pages.
+  if (isPlatform && organizations.length === 0) return <Navigate to="/admin" replace />
+
   return (
     <Layout>
       <Suspense fallback={<PageLoader />}>
-        <Outlet />
+        {organizations.length === 0 ? (
+          <NoOrganization user={user} logout={logout} />
+        ) : (
+          <Outlet />
+        )}
       </Suspense>
     </Layout>
   )

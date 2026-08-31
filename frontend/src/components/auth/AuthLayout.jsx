@@ -61,7 +61,7 @@ export default function AuthLayout() {
     return () => window.clearTimeout(t)
   }, [isLogin, reducedMotion])
 
-  if (user) return <Navigate to="/app" replace />
+  if (user) return <Navigate to={signedInPath(user)} replace />
 
   const switchMode = (next) => {
     if (submitting) return
@@ -79,8 +79,8 @@ export default function AuthLayout() {
     setError('')
     setSubmitting(true)
     try {
-      await login(email, password)
-      navigate('/app')
+      const account = await login(email, password)
+      navigate(signedInPath(account))
     } catch (err) {
       fail(err)
     }
@@ -91,8 +91,8 @@ export default function AuthLayout() {
     setError('')
     setSubmitting(true)
     try {
-      await register({ full_name: fullName, email, password })
-      navigate('/app')
+      const account = await register({ full_name: fullName, email, password })
+      navigate(signedInPath(account))
     } catch (err) {
       fail(err)
     }
@@ -107,6 +107,12 @@ export default function AuthLayout() {
 
   const dirClass = leavingFor === true ? 'from-login' : leavingFor === false ? 'from-register' : ''
   const maybeTransition = reducedMotion ? '' : ' may-transition'
+
+  const signedInPath = (account) => {
+    const organizations = (account && account.organizations) || []
+    const isPlatform = (account && (account.is_superuser || account.platform_role)) || false
+    return isPlatform && organizations.length === 0 ? '/admin' : '/app'
+  }
 
   return (
     <div

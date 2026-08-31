@@ -1341,6 +1341,32 @@ select.input {
   font-weight: 600;
 }
 
+.no-org-panel {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: var(--space-7) var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+}
+.no-org-steps {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 420px;
+}
+.no-org-actions {
+  margin-top: var(--space-2);
+  display: flex;
+  gap: var(--space-2);
+}
+
 .skeleton {
   background: linear-gradient(90deg, var(--surface-3) 25%, var(--surface) 50%, var(--surface-3) 75%);
   background-size: 200% 100%;
