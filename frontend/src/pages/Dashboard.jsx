@@ -101,7 +101,7 @@ export default function Dashboard() {
 
           <Card
             title="Recent calls"
-            actions={<Link to="/calls" className="btn small ghost">View all</Link>}
+            actions={<Link to="/app/calls" className="btn small ghost">View all</Link>}
           >
             {data.recent_calls.length === 0 ? (
               <Empty>No calls yet.</Empty>

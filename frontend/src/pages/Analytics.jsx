@@ -133,7 +133,7 @@ export default function Analytics() {
 
           <Card
             title="All calls"
-            actions={<Link to="/calls" className="btn small ghost">Manage calls</Link>}
+            actions={<Link to="/app/calls" className="btn small ghost">Manage calls</Link>}
           >
             {calls.length === 0 ? (
               <Empty>No calls yet.</Empty>

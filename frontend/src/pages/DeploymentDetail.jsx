@@ -628,7 +628,7 @@ export default function DeploymentDetail() {
     return (
       <div>
         <p>
-          <a href="#/deployments" onClick={() => navigate('/deployments')}>
+          <a href="#/app/deployments" onClick={() => navigate('/app/deployments')}>
             ← Deployments
           </a>
         </p>
@@ -708,7 +708,7 @@ export default function DeploymentDetail() {
   return (
     <div>
       <p>
-        <a href="#/deployments" onClick={() => navigate('/deployments')}>
+        <a href="#/app/deployments" onClick={() => navigate('/app/deployments')}>
           ← Deployments
         </a>
       </p>

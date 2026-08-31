@@ -21,28 +21,28 @@ import { initials } from './Ui'
 const groups = [
   {
     label: 'Overview',
-    items: [{ to: '/', label: 'Dashboard', icon: DashboardIcon, end: true }],
+    items: [{ to: '/app', label: 'Dashboard', icon: DashboardIcon, end: true }],
   },
   {
     label: 'Engagement',
     items: [
-      { to: '/agents', label: 'Agents', icon: AgentIcon },
-      { to: '/deployments', label: 'Deployments', icon: DeployIcon },
-      { to: '/calls', label: 'Calls', icon: CallIcon },
-      { to: '/customers', label: 'Customers', icon: UsersIcon },
-      { to: '/appointments', label: 'Appointments', icon: CalendarIcon },
+      { to: '/app/agents', label: 'Agents', icon: AgentIcon },
+      { to: '/app/deployments', label: 'Deployments', icon: DeployIcon },
+      { to: '/app/calls', label: 'Calls', icon: CallIcon },
+      { to: '/app/customers', label: 'Customers', icon: UsersIcon },
+      { to: '/app/appointments', label: 'Appointments', icon: CalendarIcon },
     ],
   },
   {
     label: 'Channels',
-    items: [{ to: '/phone-numbers', label: 'Phone Numbers', icon: PhoneIcon }],
+    items: [{ to: '/app/phone-numbers', label: 'Phone Numbers', icon: PhoneIcon }],
   },
   {
     label: 'Knowledge & Insights',
     items: [
-      { to: '/knowledge', label: 'Knowledge Base', icon: KnowledgeIcon },
-      { to: '/services', label: 'Services', icon: ServiceIcon },
-      { to: '/analytics', label: 'Analytics', icon: ChartIcon },
+      { to: '/app/knowledge', label: 'Knowledge Base', icon: KnowledgeIcon },
+      { to: '/app/services', label: 'Services', icon: ServiceIcon },
+      { to: '/app/analytics', label: 'Analytics', icon: ChartIcon },
     ],
   },
 ]

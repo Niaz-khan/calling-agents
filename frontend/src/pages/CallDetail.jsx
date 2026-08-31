@@ -30,7 +30,7 @@ export default function CallDetail() {
     <div>
       <PageTitle
         title={`Call #${call.id}`}
-        actions={<Link to="/calls">← All calls</Link>}
+        actions={<Link to="/app/calls">← All calls</Link>}
       />
 
       <div className="grid two">

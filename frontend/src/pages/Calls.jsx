@@ -205,7 +205,7 @@ export default function Calls() {
               {visibleCalls.map((call) => (
                 <tr key={call.id}>
                   <td>
-                    <Link to={`/calls/${call.id}`}>
+                    <Link to={`/app/calls/${call.id}`}>
                       <Badge variant={statusVariant(call.status)}>{call.status}</Badge>
                     </Link>
                   </td>
@@ -217,7 +217,7 @@ export default function Calls() {
                   <td>
                     <Badge variant={outcomeVariant(call.outcome)}>{call.outcome || '—'}</Badge>
                   </td>
-                  <td className="muted">{call.summary || '—'}</td>
+                  <td className="muted table-cell-truncate">{call.summary || '—'}</td>
                 </tr>
               ))}
             </tbody>

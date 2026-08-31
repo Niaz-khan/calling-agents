@@ -307,7 +307,7 @@ export default function Deployments() {
                     {siteIsConfigurable(deployment) && (
                       <button
                         className="btn small primary"
-                        onClick={() => navigate(`/deployments/${deployment.id}`)}
+                        onClick={() => navigate(`/app/deployments/${deployment.id}`)}
                       >
                         Configure
                       </button>
