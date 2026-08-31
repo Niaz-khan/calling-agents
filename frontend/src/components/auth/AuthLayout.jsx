@@ -46,13 +46,14 @@ export default function AuthLayout() {
 
   useEffect(() => {
     if (isLogin === prevIsLogin.current) return
+    const outgoing = prevIsLogin.current
     prevIsLogin.current = isLogin
     if (reducedMotion) {
       setLeavingFor(null)
       return
     }
     document.documentElement.classList.add('auth-transitioning')
-    setLeavingFor(prevIsLogin.current)
+    setLeavingFor(outgoing)
     const t = window.setTimeout(() => {
       setLeavingFor(null)
       document.documentElement.classList.remove('auth-transitioning')

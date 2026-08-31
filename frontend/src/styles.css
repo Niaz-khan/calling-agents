@@ -1991,7 +1991,11 @@ select.input {
   flex-direction: column;
   justify-content: center;
   z-index: 1;
-  transition: none; /* instant by default; motion only while a swap runs */
+  /* Transform transition is always on so a class toggle (is-login <-> is-register)
+     animates the surfaces across the canvas. At first mount there is no prior
+     computed value, so no transition fires — the initial layout is instant.
+     Reduced-motion users get transition:none via the media query below. */
+  transition: transform 0.82s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* Branding zone sits on the LEFT in login mode and travels RIGHT (by 100% of
@@ -2037,25 +2041,19 @@ select.input {
   filter: blur(60px);
 }
 
-/* Motion drivers — only active while JS marks a transition running on <html>.
-   The leaving brand/form are slightly scaled + dimmed so the exchange reads as
-   a morph, not a rigid slide. */
-html.auth-transitioning .auth-brand-zone,
-html.auth-transitioning .auth-form-zone {
-  transition: transform 0.82s cubic-bezier(0.22, 1, 0.36, 1);
-}
+/* While a swap runs, stack the travelling (leaving) surface above the other so
+   they overlap cleanly as they cross the blended centre, and give the zone a
+   whisper of blur for a softer, morph-like exchange. */
 html.auth-transitioning .auth-brand-zone {
   z-index: 2;
 }
 html.auth-transitioning .auth-form-zone {
   z-index: 3;
 }
-
-/* Premium morph: as the surfaces leave their resting side they slightly relax
-   and soften, then settle into the target side. */
 html.auth-transitioning .auth-zone {
   filter: blur(0.4px);
 }
+
 
 /* ---------------------------------------------------------------------------
    Form content crossfade
@@ -2072,38 +2070,33 @@ html.auth-transitioning .auth-zone {
   visibility: hidden;
   pointer-events: none;
   will-change: transform, opacity, filter;
-}
-.auth-form-zone .auth-form-slot.active {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-}
-
-/* The form zone is a grid so the two slots overlap in one cell. */
-.auth-form-zone .auth-form-stack {
-  display: grid;
-  width: 100%;
-}
-
-/* During a swap the outgoing form fades/blurs out and the incoming form
-   slides in, slightly delayed so the change happens mid-travel while the
-   branding is crossing the centre. */
-html.auth-transitioning .auth-form-slot {
+  /* Always-on so the active/inactive class toggle crossfades the two forms.
+     At first mount there is no prior computed value, so the initial state is
+     instant. Reduced-motion users get transition:none via the media query. */
   transition:
     opacity 0.5s ease 0.22s,
     transform 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.22s,
     filter 0.5s ease 0.22s,
     visibility 0.5s ease 0.22s;
 }
-html.auth-transitioning .auth-form-slot.active {
+.auth-form-zone .auth-form-slot.active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
   transform: translateY(0);
   filter: blur(0);
 }
-html.auth-transitioning .auth-form-slot:not(.active) {
+.auth-form-zone .auth-form-slot:not(.active) {
   opacity: 0;
   transform: translateY(14px);
   filter: blur(8px);
   visibility: hidden;
+}
+
+/* The form zone is a grid so the two slots overlap in one cell. */
+.auth-form-zone .auth-form-stack {
+  display: grid;
+  width: 100%;
 }
 
 
@@ -2509,7 +2502,9 @@ html.auth-transitioning .auth-form-slot:not(.active) {
       transparent
     );
   }
-  .auth-shell .auth-zone {
+  .auth-shell .auth-zone,
+  .auth-shell.is-register .auth-brand-zone,
+  .auth-shell.is-register .auth-form-zone {
     position: relative;
     width: 100%;
     min-height: 0;
