@@ -1,15 +1,16 @@
-import { Component, lazy, Suspense } from 'react'
+import { Component, lazy, Suspense, useEffect, useState } from 'react'
 import { HashRouter, Route, Routes, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth'
 import { Loading, Empty } from './components/Ui'
 import { OrganizationIcon } from './components/icons'
-import { setToken } from './api'
+import { api, setToken } from './api'
 import Layout from './components/Layout'
 import AdminLayout from './components/AdminLayout'
 import Landing from './pages/Landing'
 import AuthLayout from './components/auth/AuthLayout'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Onboarding = lazy(() => import('./pages/Onboarding'))
 const Agents = lazy(() => import('./pages/Agents'))
 const Deployments = lazy(() => import('./pages/Deployments'))
 const DeploymentDetail = lazy(() => import('./pages/DeploymentDetail'))
@@ -99,11 +100,52 @@ function Protected() {
         {organizations.length === 0 ? (
           <NoOrganization user={user} logout={logout} />
         ) : (
-          <Outlet />
+          <OnboardingRedirect>
+            <Outlet />
+          </OnboardingRedirect>
         )}
       </Suspense>
     </Layout>
   )
+}
+
+// Guard that redirects a brand-new org (no agents) through the onboarding wizard.
+// Once the user dismisses or completes it, a localStorage flag suppresses it so it
+// does not nag returning users. The wizard is only entered when we have *positively*
+// confirmed zero agents; any fetch failure lets the user through rather than
+// trapping them in an onboarding loop.
+function OnboardingRedirect({ children }) {
+  const [state, setState] = useState('loading') // loading | noagents | ok
+  const location = useLocation()
+
+  useEffect(() => {
+    let alive = true
+    setState('loading')
+    api
+      .get('/agents')
+      .then((data) => {
+        if (!alive) return
+        setState(Array.isArray(data) && data.length === 0 ? 'noagents' : 'ok')
+      })
+      .catch(() => {
+        // If we can't confirm, don't trap the user — let them in.
+        if (alive) setState('ok')
+      })
+    return () => {
+      alive = false
+    }
+  }, [location.pathname])
+
+  const dismissed = localStorage.getItem('onboarding_dismissed') === '1'
+  const alreadyOnboarding = location.pathname === '/app/onboarding'
+
+  if (state === 'loading') return <Loading />
+
+  if (state === 'noagents' && !dismissed && !alreadyOnboarding) {
+    return <Navigate to="/app/onboarding" replace />
+  }
+
+  return children
 }
 
 function RequireAdmin() {
@@ -179,6 +221,7 @@ export default function App() {
 
             <Route element={<Protected />}>
               <Route path="/app" element={<Dashboard />} />
+              <Route path="/app/onboarding" element={<Onboarding />} />
               <Route path="/app/agents" element={<Agents />} />
               <Route path="/app/deployments" element={<Deployments />} />
               <Route path="/app/deployments/:id" element={<DeploymentDetail />} />

@@ -2938,3 +2938,159 @@ html.auth-transitioning .auth-zone {
 .switch input:checked + span::after {
   transform: translateX(17px);
 }
+
+/* ============================================================
+   Onboarding wizard
+   ============================================================ */
+
+.onboarding {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.onboarding-head {
+  margin-bottom: var(--space-5, 24px);
+}
+
+.onboarding-head h1 {
+  margin: 0 0 6px;
+}
+
+.onboarding-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--space-5, 24px);
+  flex-wrap: wrap;
+}
+
+.onboarding-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.onboarding-step.active {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.onboarding-step.done {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.onboarding-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.onboarding-step.active .onboarding-step-num,
+.onboarding-step.done .onboarding-step-num {
+  background: var(--primary);
+  color: #fff;
+}
+
+.onboarding-body h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+
+.onboarding-body > .muted {
+  margin: 0 0 var(--space-4, 16px);
+}
+
+.onboarding-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 8px 0 var(--space-4, 16px);
+}
+
+.onboarding-choice {
+  text-align: left;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4, 16px);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+  font: inherit;
+  color: inherit;
+}
+
+.onboarding-choice:hover {
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.onboarding-choice.selected {
+  border-color: var(--primary);
+}
+
+.onboarding-choice-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.onboarding-choice-icon {
+  font-size: 20px;
+}
+
+.onboarding-choice-title {
+  font-weight: 600;
+  flex: 1;
+}
+
+.onboarding-choice-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  color: #fff;
+  font-size: 13px;
+}
+
+.onboarding-choice.selected .onboarding-choice-check {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.onboarding-choice p {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.onboarding-detail {
+  margin-top: var(--space-4, 16px);
+}
+
+.onboarding-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: var(--space-5, 24px);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-4, 16px);
+}

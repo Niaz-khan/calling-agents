@@ -11,10 +11,20 @@ Responsible for:
 from dataclasses import dataclass, field
 
 from .prompts import DEFAULT_AGENT_PROMPT
+from .prompt_render import render_prompt
 from .provider import generate_response
 from .tools import TOOL_DEFINITIONS, execute_tool
 
 MAX_TOOL_ROUNDS = 5
+
+
+def _load_agent(agent_id):
+    try:
+        from apps.agents.models import Agent
+
+        return Agent.objects.filter(id=agent_id).select_related("organization").first()
+    except Exception:
+        return None
 
 
 @dataclass
@@ -25,7 +35,10 @@ class AgentResult:
 
 def run_agent(system_prompt, conversation, organization, agent_id, call_id=None):
     """Run the agent loop and return the final response plus new messages."""
+    agent = _load_agent(agent_id)
     prompt = system_prompt or DEFAULT_AGENT_PROMPT
+    if agent is not None:
+        prompt = render_prompt(prompt, agent, organization)
 
     messages = [{"role": "system", "content": prompt}, *conversation]
     new_messages: list[dict] = []

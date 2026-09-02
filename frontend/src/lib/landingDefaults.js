@@ -73,7 +73,7 @@ export const defaultLanding = {
     {
       num: '02',
       title: 'Connect your business',
-      text: 'Add your phone number, website, services and business knowledge.',
+      text: 'Add your website, services and business knowledge. A phone number is optional — add one anytime.',
     },
     {
       num: '03',
@@ -87,11 +87,11 @@ export const defaultLanding = {
     },
   ],
   website_section_title: 'Put your AI agent on your website in minutes.',
-  website_section_text: 'Copy one snippet, paste it before </body>, and your agent is live.',
+  website_section_text: 'Copy one snippet, paste it before </body>, and your agent is live — no phone number needed to start.',
   website_section_cta: 'Create website agent',
-  phone_section_title: 'Never miss a customer call again.',
+  phone_section_title: 'Add a business phone number whenever you’re ready.',
   phone_section_text:
-    'Your agent answers, greets, converses, books, and transfers — on your schedule.',
+    'Come back anytime to connect your number — your agent answers, greets, books and transfers on your schedule.',
   phone_section_cta: 'Set up phone agent',
   api_section_title: 'Put your AI agent inside your own products.',
   api_section_text:
@@ -109,7 +109,7 @@ export const defaultLanding = {
   faq_subtitle: '',
   cta_title: 'Give your business an AI employee.',
   cta_subtitle:
-    'Start with one agent. Connect your business. Let it handle the conversations.',
+    'Start with one agent on your website today. Add a phone number whenever you’re ready. Let your agent handle the conversations.',
   cta_primary: 'Create your AI agent',
   cta_secondary: 'View demo',
 }
@@ -140,14 +140,15 @@ export const defaultCollections = {
   ],
   testimonials: [],
   pricing: [
-    { name: 'Starter', description: 'For small businesses getting started with one agent.', price: 'Coming soon', billing_period: '', features: ['1 AI agent', 'Phone and website channels', 'Appointment booking'], cta_text: 'Get started', highlighted: false },
-    { name: 'Growth', description: 'For growing teams that need more capacity.', price: 'Coming soon', billing_period: '', features: ['Multiple agents', 'Outbound calling', 'Knowledge base', 'Analytics'], cta_text: 'Get started', highlighted: true },
-    { name: 'Business', description: 'For organizations needing multiple agents and channels.', price: 'Coming soon', billing_period: '', features: ['More agents', 'Advanced knowledge', 'Extended analytics'], cta_text: 'Contact us', highlighted: false },
+    { name: 'Website', description: 'Start with one AI agent on your website. No phone number needed.', price: 'Coming soon', billing_period: '', features: ['1 AI agent', 'Website chat widget', 'Appointment booking', 'Basic knowledge base'], cta_text: 'Get started', highlighted: false },
+    { name: 'Growth', description: 'Add a business phone number and outbound calling.', price: 'Coming soon', billing_period: '', features: ['Everything in Website', 'Phone agent', 'Outbound calling', 'Analytics'], cta_text: 'Get started', highlighted: true },
+    { name: 'Business', description: 'For organizations with multiple agents and advanced needs.', price: 'Coming soon', billing_period: '', features: ['Multiple agents', 'Advanced knowledge', 'Extended analytics', 'Priority support'], cta_text: 'Contact us', highlighted: false },
     { name: 'Enterprise', description: 'Custom deployments for larger organizations.', price: 'Custom', billing_period: '', features: ['Everything in Business', 'Custom configuration', 'Dedicated support'], cta_text: 'Contact sales', highlighted: false },
   ],
   faqs: [
     { question: 'What is an AI business agent?', answer: 'An AI business agent answers calls and website chats for your business — understanding questions, booking appointments, sharing your services and knowledge, and handing conversations to humans when needed.' },
     { question: 'Can it answer phone calls?', answer: 'Yes. Once a phone number is connected and assigned to an agent, inbound calls are answered automatically and outbound calls can be placed from the dashboard.' },
+    { question: 'Do I need a phone number to use the website agent?', answer: 'No. Website is the fastest way to start — add the chat agent to your site with a single line of code, no phone number required. You can add a business phone number whenever you’re ready.' },
     { question: 'Can it work on my website?', answer: 'Yes. Create a website deployment, copy the snippet, and paste it before </body> on your site.' },
     { question: 'Can it book appointments?', answer: 'Yes. With services and availability configured, the agent checks the calendar and books through the backend so it never promises a slot that conflicts.' },
     { question: 'Can I give it my business knowledge?', answer: 'Yes. A knowledge base can be attached to each agent and populated with documents (PDFs and text).' },

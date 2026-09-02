@@ -140,6 +140,12 @@ DEFAULT_FAQS = [
         "placed from the dashboard.",
     },
     {
+        "question": "Do I need a phone number to use the website agent?",
+        "answer": "No. Website is the fastest way to start - add the chat agent to your site "
+        "with a single line of code, no phone number required. You can add a "
+        "business phone number whenever you're ready.",
+    },
+    {
         "question": "Can it work on my website?",
         "answer": "Yes. Create a website deployment, copy the snippet, and paste it before "
         "</body> on your site. The widget shows in the corner and opens a live chat "
@@ -252,20 +258,20 @@ DEFAULT_TESTIMONIALS = [
 
 DEFAULT_PRICING = [
     {
-        "name": "Starter",
-        "description": "For small businesses getting started with one agent.",
+        "name": "Website",
+        "description": "Start with one AI agent on your website. No phone number needed.",
         "price": "Coming soon",
         "billing_period": "",
-        "features": ["1 AI agent", "Phone and website channels", "Appointment booking"],
+        "features": ["1 AI agent", "Website chat widget", "Appointment booking", "Basic knowledge base"],
         "cta_text": "Get started",
         "highlighted": False,
     },
     {
         "name": "Growth",
-        "description": "For growing teams that need more capacity.",
+        "description": "Add a business phone number and outbound calling.",
         "price": "Coming soon",
         "billing_period": "",
-        "features": ["Multiple agents", "Outbound calling", "Knowledge base", "Analytics"],
+        "features": ["Everything in Website", "Phone agent", "Outbound calling", "Analytics"],
         "cta_text": "Get started",
         "highlighted": True,
     },
